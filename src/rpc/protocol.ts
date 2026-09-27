@@ -142,14 +142,21 @@ export interface ProblemDescriptor {
 }
 
 export interface DataPoint {
-	/** 展开后的数据点 id（bundle 已展开），即 `run/judge` 的 `testId`。 */
-	id: string;
+	/**
+	 * 展开后的数据点 id（bundle 已展开）。
+	 *
+	 * ⚠️ 线上返回的是 **number**，而 `run/judge` 的 `testId` **只接受 string**——
+	 * 直接传数字会得到 `-32602`。调用点必须显式 `String(point.id)`。
+	 * （真二进制实测，见 `.cache/research/rpc-smoke-report.md` 的 D2。）
+	 */
+	id: number;
 	score: number;
 	subtask: number;
 }
 
 export interface SamplePoint {
-	id: string;
+	/** 同 `DataPoint.id`：线上是 number，`run/judge` 需要 string。 */
+	id: number;
 	input: string;
 	output: string;
 }
@@ -191,7 +198,12 @@ export interface JudgeResult {
 	/** `TLE` / `MLE` 时为 `null`。 */
 	timeMs: number | null;
 	memoryBytes: number | null;
-	message: string;
+	/**
+	 * checker 报告（如 `"AC"` / `"Wrong answer on test 7"`）或错误诊断。
+	 * ⚠️ 线上在 `RE` / `TLE` 时给的是 **null**（真二进制实测，报告 D3），
+	 * 展示前必须做空值兜底，不要直接当字符串用。
+	 */
+	message: string | null;
 	/** 归一化得分：`AC` = 1.0，`PC` ∈ (0,1)，其余 0.0。 */
 	score: number;
 	/** 该点满分。 */
