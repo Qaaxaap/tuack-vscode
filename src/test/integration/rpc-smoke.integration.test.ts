@@ -1,24 +1,7 @@
 /**
- * 真实 `tuack-ng-rpc` 二进制的端到端冒烟（**默认跳过**）。
- *
- * 与 `src/test/unit/**` 的区别：单测用「假 NDJSON 服务端」，本文件必须连**真二进制**，
- * 因此只在设置了环境变量时运行（`pnpm run test:unit` 不会碰到它）：
- *
- * - `TUACK_RPC_BIN`：`tuack-ng-rpc` 可执行文件绝对路径（**必需**）
- * - `TUACK_NG_BIN`：`tuack-ng` CLI 绝对路径；给了就现造一个真实竞赛工程
- * - `TUACK_FIXTURE`：已存在的竞赛工程根目录（与上面二选一；会被复制进临时目录后再改）
- * - `TUACK_ASSETS_DIR`：含 `langs.json` 的 assets 目录；给了就通过 `core/assets.ts`
- *   的 shim + `XDG_DATA_HOME` 注入（见 `README.md`）
- *
- * 运行方式（仓库根）：
- * ```bash
- * TUACK_RPC_BIN=/abs/tuack-ng-rpc TUACK_NG_BIN=/abs/tuack-ng \
- *   pnpm exec vitest run --config src/test/integration/vitest.integration.config.ts
- * ```
- *
- * 断言里刻意**钉死**实测到的线上形态（包括与 `protocol.ts` / `config/schema` 假设不一致的地方），
- * 详见 `.cache/research/rpc-smoke-report.md`。被测到的差异一旦被上游修掉，本文件会红，
- * 这正是它作为「差分冒烟」的价值。
+ * 真实 tuack-ng-rpc 二进制的端到端冒烟，默认跳过：要设 TUACK_RPC_BIN（必需）与
+ * TUACK_NG_BIN 或 TUACK_FIXTURE（二选一），TUACK_ASSETS_DIR 可选；跑法见 README.md。
+ * 断言钉死实测到的线上形态（含与 protocol.ts 不一致处），见 .cache/research/rpc-smoke-report.md。
  */
 
 import { execFileSync, spawn } from "node:child_process";
@@ -46,7 +29,7 @@ const NG_BIN = process.env["TUACK_NG_BIN"];
 const FIXTURE_DIR = process.env["TUACK_FIXTURE"];
 const ASSETS_DIR = process.env["TUACK_ASSETS_DIR"];
 
-/** 需要真二进制 + 一个真实工程（现造或用现成的）。 */
+/** 需要真二进制和一个真实工程。 */
 const enabled = Boolean(RPC_BIN) && Boolean(NG_BIN ?? FIXTURE_DIR);
 
 const DAY = "day1";
@@ -314,7 +297,7 @@ describe.skipIf(!enabled)("tuack-ng-rpc 真实二进制冒烟", () => {
 		expect(typeof problem.config["memory limit"]).toBe("string");
 	});
 
-	it("problem/list 与 problem/get：bundle 已展开；id 是**数字**（与 protocol.ts 的 string 声明不符）", async () => {
+	it("problem/list 与 problem/get：bundle 已展开；id 是数字（与 protocol.ts 的 string 声明不符）", async () => {
 		const list = await proc.client.call("problem/list", { sessionId, scope: "contest" });
 		expect(list.problems.map((p) => p.path)).toEqual([PROBLEM_SCOPE]);
 		expect(list.problems[0]?.name).toBe(PROBLEM);
@@ -329,24 +312,30 @@ describe.skipIf(!enabled)("tuack-ng-rpc 真实二进制冒烟", () => {
 		expect(detail.path).toBe(PROBLEM_SCOPE);
 		expect(detail.data.map((d) => String(d.id))).toEqual(["1", "2", "3"]);
 
-		// ⚠️ 线上 `id` 是 JSON number；`protocol.ts` 声明为 string，而 `run/judge` 又只收 string。
+		// 服务端返回 number，protocol.ts 却声明 string，而 run/judge 只收 string。
 		const rawDataId: unknown = detail.data[0]?.id;
 		const rawSampleId: unknown = detail.samples[0]?.id;
 		expect(typeof rawDataId, `problem/get.data[].id 实测 ${typeof rawDataId}，protocol.ts 声明 string`).toBe("number");
 		expect(typeof rawSampleId, `problem/get.samples[].id 实测 ${typeof rawSampleId}，protocol.ts 声明 string`).toBe("number");
 	});
 
-	it("config/schema：三份 schema 的 required/properties 与 schemas/tuack-conf.schema.json 一致", async () => {
+	it("config/schema：三份 schema 与仓库 schema 对齐，只有三个开关是上游的 snake_case", async () => {
 		const schema = await proc.client.call("config/schema", undefined);
 		const repo = JSON.parse(
 			fs.readFileSync(path.resolve(__dirname, "../../../schemas/tuack-conf.schema.json"), "utf8"),
 		) as { definitions: Record<string, { required?: string[]; properties?: Record<string, unknown> }> };
 
+		// 上游 config/schema 把这三个开关写成 snake_case，真实 FileView 与仓库 schema 用 kebab；见报告 D1。
+		const upstreamSnakeCase = new Set(["file_io", "noi_style", "use_pretest"]);
+		const toKebab = (key: string): string => (upstreamSnakeCase.has(key) ? key.replace(/_/g, "-") : key);
+
 		for (const level of ["contest", "day", "problem"] as const) {
 			const wire = schema[level] as { $schema?: string; required?: string[]; properties?: Record<string, unknown> };
 			expect(wire.$schema).toBe("http://json-schema.org/draft-07/schema#");
 			expect([...(wire.required ?? [])].sort()).toEqual([...(repo.definitions[level]?.required ?? [])].sort());
-			expect(Object.keys(wire.properties ?? {}).sort()).toEqual(Object.keys(repo.definitions[level]?.properties ?? {}).sort());
+			expect(Object.keys(wire.properties ?? {}).map(toKebab).sort()).toEqual(
+				Object.keys(repo.definitions[level]?.properties ?? {}).sort(),
+			);
 		}
 
 		const problem = schema.problem as { required: string[] };
@@ -378,7 +367,7 @@ describe.skipIf(!enabled)("tuack-ng-rpc 真实二进制冒烟", () => {
 			// 实测上界 = statement.md 按 '\n' 切分后的段数（尾换行会多出一条空段）。
 			expect(Math.max(...sources)).toBe(original.split("\n").length);
 
-			// ⚠️ 上游差异：每行行首的一个空格会被无条件吃掉（缩进代码块/嵌套列表会被破坏）。
+			// 上游差异：每行行首的一个空格会被吃掉，缩进代码块与嵌套列表会被破坏。
 			const indented = "## 题目描述\n\n普通行\n\n  缩进两格的行\n    * 列表项\n\n    code\n";
 			fs.writeFileSync(statementPath(), indented);
 			const preview2 = await proc.client.call("ren/preview", { sessionId, scope: PROBLEM_SCOPE });
@@ -389,7 +378,7 @@ describe.skipIf(!enabled)("tuack-ng-rpc 真实二进制冒烟", () => {
 		}
 	});
 
-	it("ren/run：异步事件 → ren/get 返回 tmpDir/files，且 tmpDir 永不自动清理", async (ctx) => {
+	it("ren/run：异步事件到 ren/get 的 tmpDir/files，且 tmpDir 永不自动清理", async (ctx) => {
 		const template = process.env["TUACK_SMOKE_TEMPLATE"] ?? "markdown";
 		let taskId: string;
 		try {
@@ -433,7 +422,7 @@ describe.skipIf(!enabled)("tuack-ng-rpc 真实二进制冒烟", () => {
 		expect(fs.existsSync(tmpDir)).toBe(false);
 	});
 
-	it("run/create → run/judge → run/score：默认 file-io（题解写 p1.out），run/started 早于响应", async () => {
+	it("run/create、run/judge、run/score：默认 file-io（题解写 p1.out），run/started 早于响应", async () => {
 		const detail = (await proc.client.call("problem/get", { sessionId, problem: PROBLEM_SCOPE })).problem;
 		expect(detail.fileIo).toBeNull(); // 「未设置」；实际 judge 走 file_io=true 默认值
 
@@ -475,7 +464,7 @@ describe.skipIf(!enabled)("tuack-ng-rpc 真实二进制冒烟", () => {
 		expect(snapshot.judged).toHaveLength(3);
 		expect(snapshot.report?.total).toBe(100);
 
-		// ⚠️ 数字 testId 被服务端拒绝：`problem/get` 给 number，`run/judge` 只收 string。
+		// 数字 testId 会被拒绝：problem/get 给 number，run/judge 只收 string。
 		await expect(
 			proc.client.call("run/judge", { sessionId, runId: created.runId, testId: 2 as unknown as string }),
 		).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
@@ -506,7 +495,7 @@ describe.skipIf(!enabled)("tuack-ng-rpc 真实二进制冒烟", () => {
 		);
 		expect(finished?.state).toBe("cancelled");
 
-		// ⚠️ 会话先被销毁，所以拿到的是 -32001（SessionNotFound），文档里写的是 -32006。
+		// 会话先被销毁，所以是 -32001（SessionNotFound），文档里写的是 -32006。
 		await expect(proc.client.call("run/get", { sessionId: opened.sessionId, runId })).rejects.toMatchObject({
 			code: ErrorCode.SessionNotFound,
 		});
@@ -550,7 +539,7 @@ describe.skipIf(!enabled)("tuack-ng-rpc 真实二进制冒烟", () => {
 		const bogus = await proc.client.call("config/set", { sessionId, scope: DAY, field: "/nope", value: 1 });
 		expect(bogus.config["nope"]).toBeUndefined();
 
-		// 5) revision 是 session-global 乐观并发：过期值 → -32007。
+		// 5) revision 是 session-global 乐观并发，过期值报 -32007。
 		await expect(
 			proc.client.call("config/set", { sessionId, scope: DAY, field: "/title", value: "x", revision: before.revision }),
 		).rejects.toMatchObject({ code: ErrorCode.RevisionConflict });

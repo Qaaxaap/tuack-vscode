@@ -1,12 +1,11 @@
 import { defineConfig } from "vitest/config";
 
 /**
- * 集成冒烟配置：**只**收集 `src/test/integration/**`，默认的 `vitest.config.ts`
- * 只收集 `src/test/unit/**`，因此这条链路永远不会拖慢 `pnpm run test:unit`。
+ * 集成冒烟配置：只收 `src/test/integration/**`，所以不会进 `pnpm run test:unit`。
  *
- * 必须在仓库根执行（`include` 相对 `process.cwd()` 解析）：
+ * 必须在仓库根执行，`include` 相对 `process.cwd()` 解析：
  * ```bash
- * TUACK_RPC_BIN=… TUACK_NG_BIN=… pnpm exec vitest run --config src/test/integration/vitest.integration.config.ts
+ * TUACK_RPC_BIN=… TUACK_NG_BIN=… pnpm exec vitest run --config src/test/integration/vitest.integration.config.mts
  * ```
  */
 export default defineConfig({
