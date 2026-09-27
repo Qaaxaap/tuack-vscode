@@ -1,0 +1,412 @@
+{
+  "name": "tuack-vscode",
+  "displayName": "Tuack",
+  "description": "%extension.description%",
+  "version": "0.1.0",
+  "publisher": "tuack-ng",
+  "license": "AGPL-3.0-or-later",
+  "private": true,
+  "engines": {
+    "vscode": "^1.138.0"
+  },
+  "l10n": "./l10n",
+  "categories": [
+    "Programming Languages",
+    "Testing",
+    "Other"
+  ],
+  "keywords": [
+    "tuack",
+    "oi",
+    "acm",
+    "problem-setting",
+    "contest"
+  ],
+  "main": "./dist/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "%capabilities.untrustedWorkspaces.description%"
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "%capabilities.virtualWorkspaces.description%"
+    }
+  },
+  "activationEvents": [
+    "workspaceContains:**/conf.json",
+    "onWebviewPanel:tuack.preview"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "tuack.diagnose",
+        "title": "%command.diagnose%",
+        "category": "Tuack",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "tuack.showLogs",
+        "title": "%command.showLogs%",
+        "category": "Tuack",
+        "icon": "$(output)"
+      },
+      {
+        "command": "tuack.refresh",
+        "title": "%command.refresh%",
+        "category": "Tuack",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "tuack.openContest",
+        "title": "%command.openContest%",
+        "category": "Tuack",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "tuack.revealInTree",
+        "title": "%command.revealInTree%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.preview.show",
+        "title": "%command.preview.show%",
+        "category": "Tuack",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "tuack.preview.showToSide",
+        "title": "%command.preview.showToSide%",
+        "category": "Tuack",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "tuack.preview.refresh",
+        "title": "%command.preview.refresh%",
+        "category": "Tuack",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "tuack.ren.run",
+        "title": "%command.ren.run%",
+        "category": "Tuack",
+        "icon": "$(file-pdf)"
+      },
+      {
+        "command": "tuack.ren.list",
+        "title": "%command.ren.list%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.test.run",
+        "title": "%command.test.run%",
+        "category": "Tuack",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "tuack.doc.check",
+        "title": "%command.doc.check%",
+        "category": "Tuack",
+        "icon": "$(check)"
+      },
+      {
+        "command": "tuack.doc.format",
+        "title": "%command.doc.format%",
+        "category": "Tuack",
+        "icon": "$(wand)"
+      },
+      {
+        "command": "tuack.doc.validate",
+        "title": "%command.doc.validate%",
+        "category": "Tuack",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "tuack.gen.contest",
+        "title": "%command.gen.contest%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.gen.day",
+        "title": "%command.gen.day%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.gen.problem",
+        "title": "%command.gen.problem%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.gen.data",
+        "title": "%command.gen.data%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.gen.samples",
+        "title": "%command.gen.samples%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.gen.code",
+        "title": "%command.gen.code%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.gen.all",
+        "title": "%command.gen.all%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.gen.lfs",
+        "title": "%command.gen.lfs%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.dmk.gen",
+        "title": "%command.dmk.gen%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.dmk.regen",
+        "title": "%command.dmk.regen%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.dmk.reset",
+        "title": "%command.dmk.reset%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.validate",
+        "title": "%command.validate%",
+        "category": "Tuack"
+      },
+      {
+        "command": "tuack.dump",
+        "title": "%command.dump%",
+        "category": "Tuack"
+      }
+    ],
+    "configuration": {
+      "title": "%config.title%",
+      "properties": {
+        "tuack.rpcPath": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "scope": "machine-overridable",
+          "markdownDescription": "%config.rpcPath.description%"
+        },
+        "tuack.typstPath": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "scope": "machine-overridable",
+          "markdownDescription": "%config.typstPath.description%"
+        },
+        "tuack.assetsPath": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "scope": "machine-overridable",
+          "markdownDescription": "%config.assetsPath.description%"
+        },
+        "tuack.preview.engine": {
+          "type": "string",
+          "enum": [
+            "bundled",
+            "vscode-markdown"
+          ],
+          "enumDescriptions": [
+            "%config.preview.engine.bundled%",
+            "%config.preview.engine.vscode-markdown%"
+          ],
+          "default": "bundled",
+          "scope": "resource",
+          "markdownDescription": "%config.preview.engine.description%"
+        },
+        "tuack.preview.debounceMs": {
+          "type": "number",
+          "default": 300,
+          "minimum": 0,
+          "maximum": 5000,
+          "scope": "resource",
+          "markdownDescription": "%config.preview.debounceMs.description%"
+        },
+        "tuack.preview.saveBeforePreview": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "markdownDescription": "%config.preview.saveBeforePreview.description%"
+        },
+        "tuack.preview.defaultTemplate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "scope": "resource",
+          "markdownDescription": "%config.preview.defaultTemplate.description%"
+        },
+        "tuack.preview.openBeside": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "markdownDescription": "%config.preview.openBeside.description%"
+        },
+        "tuack.test.watchdogMinutes": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "scope": "resource",
+          "markdownDescription": "%config.test.watchdogMinutes.description%"
+        },
+        "tuack.doc.checkOnSave": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "markdownDescription": "%config.doc.checkOnSave.description%"
+        },
+        "tuack.logLevel": {
+          "type": "string",
+          "enum": [
+            "trace",
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "default": "info",
+          "scope": "window",
+          "markdownDescription": "%config.logLevel.description%"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tuack",
+          "title": "Tuack",
+          "icon": "media/tuack.svg"
+        }
+      ]
+    },
+    "views": {
+      "tuack": [
+        {
+          "id": "tuack.contest",
+          "name": "%view.contest.name%",
+          "icon": "media/tuack.svg",
+          "contextualTitle": "%view.contest.name%"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "tuack.contest",
+        "contents": "%view.contest.welcome%"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "tuack.refresh",
+          "when": "view == tuack.contest",
+          "group": "navigation@1"
+        },
+        {
+          "command": "tuack.diagnose",
+          "when": "view == tuack.contest",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "tuack.preview.showToSide",
+          "when": "resourceLangId == markdown && resourceFilename == statement.md",
+          "group": "navigation@1"
+        },
+        {
+          "command": "tuack.ren.run",
+          "when": "resourceLangId == markdown && resourceFilename == statement.md",
+          "group": "navigation@2"
+        },
+        {
+          "command": "tuack.doc.check",
+          "when": "resourceLangId == markdown && resourceFilename == statement.md",
+          "group": "navigation@3"
+        },
+        {
+          "command": "tuack.doc.format",
+          "when": "resourceLangId == markdown && resourceFilename == statement.md",
+          "group": "navigation@4"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "tuack.revealInTree",
+          "when": "false"
+        }
+      ]
+    },
+    "grammars": [
+      {
+        "scopeName": "tuack.jinja.injection",
+        "path": "./syntaxes/jinja-injection.json",
+        "injectTo": [
+          "text.html.markdown"
+        ]
+      },
+      {
+        "scopeName": "tuack.jinja.fenced",
+        "path": "./syntaxes/jinja-fenced.json",
+        "injectTo": [
+          "markup.fenced_code.block.markdown"
+        ]
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "conf.json",
+        "url": "./schemas/tuack-conf.schema.json"
+      }
+    ]
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "node esbuild.js --production",
+    "vscode:prepublish": "pnpm run package",
+    "lint": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "test": "vscode-test",
+    "vsix": "vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "dompurify": "^3.3.0",
+    "markdown-it": "^14.1.0",
+    "vscode-json-languageservice": "5.7.2"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.18.0",
+    "@types/vscode": "^1.138.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "packageManager": "pnpm@11.26.0"
+}
