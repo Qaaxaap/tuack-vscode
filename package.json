@@ -5,6 +5,10 @@
   "version": "0.1.0",
   "publisher": "tuack-ng",
   "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tuack-ng/tuack-vscode.git"
+  },
   "private": true,
   "engines": {
     "vscode": "^1.138.0"
