@@ -1,0 +1,250 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Tuack 配置文件（conf.json）",
+  "description": "Tuack-NG 的 conf.json。同一文件名会在竞赛工程（contest）/场次（day）/题目（problem）三个层级出现，靠 `folder` 字段区分。",
+  "type": "object",
+  "defaultSnippets": [],
+  "anyOf": [
+    {
+      "if": { "required": ["folder"], "properties": { "folder": { "const": "contest" } } },
+      "then": { "$ref": "#/definitions/contest" },
+      "else": {
+        "if": { "required": ["folder"], "properties": { "folder": { "const": "day" } } },
+        "then": { "$ref": "#/definitions/day" },
+        "else": {
+          "if": { "required": ["folder"], "properties": { "folder": { "const": "problem" } } },
+          "then": { "$ref": "#/definitions/problem" }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "renderSwitches": {
+      "use_pretest": {
+        "type": "boolean",
+        "markdownDescription": "是否包含预测试数据点。可被上层覆盖。"
+      },
+      "noi_style": {
+        "type": "boolean",
+        "markdownDescription": "是否使用 NOI 风格题面。可被上层覆盖。"
+      },
+      "file_io": {
+        "type": "boolean",
+        "markdownDescription": "是否使用文件输入输出。可被上层覆盖。"
+      }
+    },
+    "argValue": {
+      "anyOf": [{ "type": "integer" }, { "type": "number" }, { "type": "string" }, { "type": "boolean" }]
+    },
+    "contest": {
+      "type": "object",
+      "description": "竞赛工程根配置。",
+      "required": ["version", "folder", "name", "subdir", "title", "short title"],
+      "properties": {
+        "version": { "type": "integer", "minimum": 3, "description": "配置版本，当前为 7。" },
+        "folder": { "const": "contest" },
+        "name": { "type": "string", "description": "竞赛英文名（目录名）。" },
+        "title": { "type": "string", "description": "竞赛标题。" },
+        "short title": { "type": "string", "description": "竞赛副标题 / 简称。" },
+        "subdir": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "场次目录列表（相对本目录）。",
+          "default": []
+        },
+        "use_pretest": { "$ref": "#/definitions/renderSwitches/use_pretest" },
+        "noi_style": { "$ref": "#/definitions/renderSwitches/noi_style" },
+        "file_io": { "$ref": "#/definitions/renderSwitches/file_io" }
+      }
+    },
+    "day": {
+      "type": "object",
+      "description": "场次配置。",
+      "required": ["version", "folder", "name", "subdir", "title", "compile"],
+      "properties": {
+        "version": { "type": "integer", "minimum": 3 },
+        "folder": { "const": "day" },
+        "name": { "type": "string", "description": "场次英文名（目录名）。" },
+        "title": { "type": "string", "description": "场次标题。" },
+        "subdir": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "题目目录列表（相对本目录）。",
+          "default": []
+        },
+        "compile": {
+          "type": "object",
+          "description": "各语言的编译参数，键为语言（如 cpp / c / pas / rs）。",
+          "additionalProperties": { "type": "string" }
+        },
+        "start time": {
+          "type": "array",
+          "description": "比赛开始时间 [年, 月, 日, 时, 分, 秒]。",
+          "items": { "type": "integer" },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "end time": {
+          "type": "array",
+          "description": "比赛结束时间 [年, 月, 日, 时, 分, 秒]。",
+          "items": { "type": "integer" },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "use_pretest": { "$ref": "#/definitions/renderSwitches/use_pretest" },
+        "noi_style": { "$ref": "#/definitions/renderSwitches/noi_style" },
+        "file_io": { "$ref": "#/definitions/renderSwitches/file_io" }
+      }
+    },
+    "problem": {
+      "type": "object",
+      "description": "题目配置。",
+      "required": ["version", "folder", "type", "name", "title", "time limit", "memory limit", "dmk"],
+      "properties": {
+        "version": { "type": "integer", "minimum": 3 },
+        "folder": { "const": "problem" },
+        "type": {
+          "enum": ["program", "output", "interactive"],
+          "description": "题目类型。interactive 需要额外配置 interactive 字段。"
+        },
+        "name": { "type": "string", "description": "题目英文名（目录名，也是提交文件名）。" },
+        "title": { "type": "string", "description": "题目中文标题。" },
+        "time limit": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "时间限制（秒）。"
+        },
+        "memory limit": {
+          "type": "string",
+          "description": "内存限制，字节大小字符串，如 \"512 MiB\" 或 \"256MB\"。读回时会被规范化为二进制单位。"
+        },
+        "dmk": {
+          "enum": ["skip", "input", "output", "on"],
+          "description": "造数据模式。"
+        },
+        "args": {
+          "type": "object",
+          "description": "传递给 generator / validator 的参数。",
+          "additionalProperties": { "$ref": "#/definitions/argValue" },
+          "default": {}
+        },
+        "generator": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "properties": {
+                "data": { "$ref": "#/definitions/toolEntryGenerator" },
+                "sample": { "$ref": "#/definitions/toolEntry" }
+              },
+              "required": ["data"]
+            }
+          ]
+        },
+        "checker": { "anyOf": [{ "type": "null" }, { "$ref": "#/definitions/toolPair" }] },
+        "validator": { "anyOf": [{ "type": "null" }, { "$ref": "#/definitions/toolPair" }] },
+        "interactive": {
+          "type": "object",
+          "description": "交互题配置。",
+          "properties": {
+            "grader": { "type": "string" },
+            "header": { "type": "string" },
+            "sample_grader": { "type": "string" },
+            "dmk_grader": { "type": "string" }
+          },
+          "required": ["grader", "header"]
+        },
+        "samples": {
+          "type": "array",
+          "description": "样例列表。",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "integer" },
+              "input": { "type": "string", "description": "输入文件名，缺省为 `<id>.in`。" },
+              "output": { "type": "string", "description": "输出文件名，缺省为 `<id>.ans`。" },
+              "args": { "type": "object", "additionalProperties": { "$ref": "#/definitions/argValue" } },
+              "dmk": { "enum": ["skip", "input", "output", "on"] }
+            }
+          }
+        },
+        "data": {
+          "type": "array",
+          "description": "数据点列表。id 可以是单个整数，也可以是整数数组（表示一个捆绑包，共享同一份生成参数）。",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": ["id", "score"],
+            "properties": {
+              "id": {
+                "anyOf": [
+                  { "type": "integer" },
+                  { "type": "array", "items": { "type": "integer" }, "minItems": 1 }
+                ]
+              },
+              "score": { "type": "number" },
+              "subtask": { "type": "integer", "default": 0 },
+              "input": { "type": "string" },
+              "output": { "type": "string" },
+              "args": { "type": "object", "additionalProperties": { "$ref": "#/definitions/argValue" } },
+              "dmk": { "enum": ["skip", "input", "output", "on"] }
+            }
+          }
+        },
+        "subtasks": {
+          "type": "object",
+          "description": "子任务聚合方式，键为子任务编号。",
+          "default": {},
+          "propertyNames": { "type": "string", "pattern": "^[0-9]+$" },
+          "additionalProperties": { "enum": ["sum", "max", "min"] }
+        },
+        "tests": {
+          "type": "object",
+          "description": "测试者（题解 / 暴力 / 标程）列表，键为标识名。",
+          "default": {},
+          "additionalProperties": {
+            "type": "object",
+            "required": ["expected", "path"],
+            "properties": {
+              "expected": {
+                "anyOf": [
+                  { "type": "string" },
+                  { "type": "array", "items": { "type": "string" } }
+                ],
+                "description": "期望的评测条件表达式，如 \"== 100\" 或 \">= 60\"。"
+              },
+              "path": { "type": "string", "description": "源码相对题目目录的路径。" }
+            }
+          }
+        }
+      }
+    },
+    "toolEntry": {
+      "type": "object",
+      "required": ["source"],
+      "properties": {
+        "source": { "type": "string" },
+        "deps": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "toolEntryGenerator": {
+      "type": "object",
+      "required": ["source"],
+      "properties": {
+        "source": { "type": "string" },
+        "deps": { "type": "array", "items": { "type": "string" } },
+        "validate": { "type": "boolean", "default": false }
+      }
+    },
+    "toolPair": {
+      "type": "object",
+      "required": ["data"],
+      "properties": {
+        "data": { "$ref": "#/definitions/toolEntry" },
+        "sample": { "$ref": "#/definitions/toolEntry" }
+      }
+    }
+  }
+}
