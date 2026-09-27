@@ -14,13 +14,14 @@ describe("renderMarkdown：data-line 锚点", () => {
 		expect(result.html).toContain('<h2 data-line="3">标题</h2>');
 		expect(result.html).toContain('<li data-line="5">a</li>');
 		expect(result.html).toContain('<li data-line="6">b</li>');
-		expect(result.anchors).toEqual([1, 3, 5, 6]);
+		// 末位是文末哨兵：行数 7 → data-line 8。
+		expect(result.anchors).toEqual([1, 3, 5, 6, 8]);
 	});
 
 	it("锚点集合与 HTML 里实际出现的属性完全一致", () => {
 		const result = renderMarkdown("# A\n\ntext\n\n```\ncode\n```\n");
 		expect(new Set(sourceLineAttributes(result.html))).toEqual(new Set(result.anchors));
-		expect(result.anchors).toEqual([1, 3, 5]);
+		expect(result.anchors).toEqual([1, 3, 5, 9]);
 	});
 
 	it("围栏代码块与缩进代码块也带锚点", () => {
@@ -28,7 +29,7 @@ describe("renderMarkdown：data-line 锚点", () => {
 		expect(fence.html).toContain("<pre>");
 		expect(fence.html).toContain("language-c++");
 		expect(fence.html).toContain('data-line="1"');
-		expect(fence.anchors).toEqual([1]);
+		expect(fence.anchors).toEqual([1, 5]);
 
 		const indented = renderMarkdown("    plain code\n");
 		expect(indented.html).toContain('<pre data-line="1">');
@@ -41,7 +42,7 @@ describe("renderMarkdown：data-line 锚点", () => {
 		expect(result.html).toContain('style="text-align:right"');
 		expect(result.html).toContain('<tr data-line="1">');
 		expect(result.html).toContain('<tr data-line="3">');
-		expect(result.anchors).toEqual([1, 3]);
+		expect(result.anchors).toEqual([1, 3, 5]);
 	});
 
 	it("表格对齐同时写 data-align（DOMPurify 可能丢掉 style 时的兜底）", () => {
@@ -55,6 +56,25 @@ describe("renderMarkdown：data-line 锚点", () => {
 		const result = renderMarkdown("x\n");
 		expect(result.html).toContain('<p data-line="1">x</p>');
 		expect(result.html).not.toContain("data-source-line");
+	});
+
+	it("正文末尾追加文末哨兵（指向 行数 + 1）", () => {
+		// "a\n\nb" 共 3 行 → 哨兵 data-line = 4（与内置 markdownDocument.lineCount + 1 同义）。
+		const result = renderMarkdown("a\n\nb");
+		expect(result.html).toContain('<div class="code-line" data-line="4"></div>');
+		expect(result.anchors.at(-1)).toBe(4);
+
+		// 末尾带换行时行数按 split 计（最后一行是空行），哨兵仍严格大于所有真实锚点。
+		const withTrailing = renderMarkdown("a\n\nb\n");
+		const sentinel = withTrailing.anchors.at(-1) ?? 0;
+		expect(sentinel).toBe(5);
+		expect(sentinel).toBeGreaterThan(Math.max(...withTrailing.anchors.slice(0, -1)));
+	});
+
+	it("空文档不追加哨兵（HTML 保持为空）", () => {
+		const result = renderMarkdown("");
+		expect(result.html).toBe("");
+		expect(result.anchors).toEqual([]);
 	});
 
 	it("sourceLines: false 时不写入锚点", () => {
@@ -103,7 +123,7 @@ describe("renderMarkdown：健壮性", () => {
 		const result = renderMarkdown("```python\nprint(1)\n");
 		expect(result.html).toContain("<pre>");
 		expect(result.html).toContain("print(1)");
-		expect(result.anchors.length).toBe(1);
+		expect(result.anchors.length).toBe(2); // 围栏锚点 + 文末哨兵
 	});
 
 	it("超长表格（400 行 × 8 列）不崩且完整渲染", () => {
@@ -118,7 +138,7 @@ describe("renderMarkdown：健壮性", () => {
 		expect(result.html).toContain("<table");
 		expect((result.html.match(/<tr /g) ?? []).length).toBe(401);
 		expect(result.html).toContain("399-7");
-		expect(result.anchors.length).toBe(401);
+		expect(result.anchors.length).toBe(402); // 401 个真实锚点 + 文末哨兵
 	});
 
 	it("超深嵌套与畸形输入不崩", () => {

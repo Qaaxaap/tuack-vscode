@@ -12,6 +12,8 @@
  *   （早期实现用的 `data-source-line` 仍被前端选择器兼容读取，但不再写出。）
  * - 渲染结果再过一遍 `sanitize.ts`（Node 侧的白名单预过滤，纵深防御）。
  *   webview 侧还会用 DOMPurify 再过一遍（浏览器内的权威防线）。
+ * - 正文末尾追加**文末哨兵**（`data-line = 行数 + 1` 的空锚点），与内置预览一致，
+ *   否则最后一个块没有 `next`、预览滚不到底。
  */
 
 import MarkdownIt from "markdown-it";
@@ -110,6 +112,26 @@ function injectTableAlignment(tokens: readonly MarkdownIt.Token[]): void {
 }
 
 /**
+ * 文末哨兵（内置 `documentRenderer` 同款，不可省）。
+ *
+ * 在正文末尾追加一个指向「最后一行 + 1」的空锚点：否则最后一个块没有 `next`，
+ * 预览侧的分段插值会退化成块内比例、滚不到底。
+ */
+const SENTINEL_CLASS = "code-line";
+
+/** 数出 Markdown 的行数（与 `data-line` 同一套 1 起行号）。 */
+function countLines(markdown: string): number {
+	if (markdown.length === 0) {
+		return 0;
+	}
+	return markdown.split(/\r\n|\r|\n/).length;
+}
+
+function appendEndSentinel(html: string, markdown: string): string {
+	return `${html}<div class="${SENTINEL_CLASS}" data-line="${countLines(markdown) + 1}"></div>`;
+}
+
+/**
  * 把展开后的 Markdown 渲染成 HTML。
  *
  * 不抛错：任何输入（空文档、未闭合代码块、超长表格、畸形嵌套）都退化为合法 HTML 片段。
@@ -126,7 +148,10 @@ export function renderMarkdown(markdown: string, options: RenderOptions = {}): R
 	if (withSourceLines) {
 		injectSourceLines(tokens);
 	}
-	const raw = markdownIt.renderer.render(tokens, markdownIt.options, env);
+	let raw = markdownIt.renderer.render(tokens, markdownIt.options, env);
+	if (withSourceLines && raw.trim().length > 0) {
+		raw = appendEndSentinel(raw, source);
+	}
 
 	if (!withSanitize) {
 		return { html: raw, anchors: collectAnchors(raw), removedTags: [], removedAttributes: [], blockedUrls: [] };
