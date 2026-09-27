@@ -1,4 +1,12 @@
 {
   "Command {0} is not wired up yet.": "命令 {0} 尚未接入（当前为骨架阶段）。",
-  "Show Logs": "显示日志"
+  "Show Logs": "显示日志",
+  "Tuack: open statement.md first, then show the preview.": "Tuack：请先打开 statement.md，再显示预览。",
+  "Tuack: only {0} can be previewed as a problem statement.": "Tuack：只有 {0} 能作为题面预览。",
+  "Tuack: {0} is not inside a Tuack contest (no conf.json with folder=contest found above it).": "Tuack：{0} 不在 Tuack 竞赛工程内（向上找不到 folder=contest 的 conf.json）。",
+  "Tuack: no preview is open yet. Run \"Tuack: Show Preview\" first.": "Tuack：还没有打开预览。请先执行「Tuack: 显示预览」。",
+  "Tuack Preview: {0}": "Tuack 预览：{0}",
+  "Tuack: preview shows the saved file": "Tuack：预览基于已保存内容",
+  "Unsaved changes are not included because tuack.preview.saveBeforePreview is off.": "因为关闭了 tuack.preview.saveBeforePreview，未保存的编辑不会出现在预览里。",
+  "Preview is based on the saved file on disk; unsaved changes are not included (tuack.preview.saveBeforePreview = false).": "预览基于磁盘上已保存的文件；未保存的编辑不会包含在内（tuack.preview.saveBeforePreview = false）。"
 }
