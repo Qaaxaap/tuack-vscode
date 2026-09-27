@@ -1,0 +1,131 @@
+# ═══════════════════════════════════════════════════════════════
+# tuack-vscode
+# 参考：github/gitignore 的 Node + Global/VisualStudioCode + Global/{macOS,Windows,Linux}
+#       以及 tuack-ng / tuack-gui 两个兄弟仓库的 .gitignore，按 TS 扩展需要裁剪
+# ═══════════════════════════════════════════════════════════════
+
+# ── 设计决策与本地缓存（本仓库约定，永不入库）─────────────────
+# 调研记录、设计决策、e2e 夹具、下载的工具链一律放这里
+.cache/
+
+# ── VSCode 扩展开发（github/gitignore · Global/VisualStudioCode）──
+# 注意：.gitignore 不支持行尾注释，`#` 之后的内容会被当成模式的一部分，
+# 因此每条反取消规则都必须单独占一行、行尾不能写注释。
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+# 扩展开发必需：F5 调试
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+!*.code-workspace
+
+# 打包出的扩展
+*.vsix
+
+# VSCode 扩展测试宿主（github/gitignore · Node）
+.vscode-test/
+.vscode-test-web/
+
+# ── 依赖 ───────────────────────────────────────────────────────
+node_modules/
+jspm_packages/
+web_modules/
+.pnpm-store
+.yarn-integrity
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+package-lock.json
+pnpm-lock.yaml.bak
+
+# ── 构建产物 ───────────────────────────────────────────────────
+dist/
+out/
+build/
+build/Release
+*.tsbuildinfo
+.turbo
+.vite/
+vite.config.*.timestamp-*
+
+# ── 测试与覆盖率 ───────────────────────────────────────────────
+coverage/
+*.lcov
+.nyc_output
+
+# ── 各类缓存 ───────────────────────────────────────────────────
+.eslintcache
+.stylelintcache
+.npm
+.node_repl_history
+.parcel-cache
+.grunt
+
+# ── 日志与诊断报告 ─────────────────────────────────────────────
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# ── 运行时临时数据 ─────────────────────────────────────────────
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# ── 环境变量 ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── npm pack 产物 ──────────────────────────────────────────────
+*.tgz
+
+# ── 编辑器 / 操作系统（macOS + Windows + Linux 三份合并）────────
+.DS_Store
+.localized
+__MACOSX/
+._*
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+*~
+.directory
+.Trash-*
+.nfs*
+nohup.out
+
+# ── 其他 IDE ───────────────────────────────────────────────────
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── tuack 生态（参考 tuack-ng/.gitignore 与 tuack-gui/.gitignore）──
+# 在仓库内跑 e2e 时 tuack-ng 会产出的东西
+*.pdf
+result.csv
+result-sample.csv
+/result
+/target
+.direnv/
+.env-local
+
+# ── Python（scripts/ 下的辅助脚本，参考 tuack-gui）─────────────
+__pycache__/
+*.py[cod]
