@@ -48,8 +48,7 @@ package: build
 dev:
     code --extensionDevelopmentPath={{justfile_directory()}}
 
-# 真二进制的集成冒烟，需要先准备好 tuack-ng-rpc
-# 见 src/test/integration/README.md，环境变量写在 .cache/smoke.env 里再执行
+# 真二进制的集成冒烟，需要先按 src/test/integration/README.md 设好环境变量
 smoke:
     ./src/test/integration/run-smoke.sh
 
