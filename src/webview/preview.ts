@@ -11,8 +11,9 @@
  * - 前端负责插入 HTML（DOMPurify 二次消毒）、按 `data-line` 锚点滚动同步、点击事件上报，
  *   **不自己导航**。
  *
- * 滚动同步复刻 VS Code 内置 Markdown 预览：`data-line` 锚点 + `elementFromPoint` 反查 +
- * 双向各 ~100ms 的滚动锁定（见 `./scrollSync.ts` 与 `./protocol.ts` 的 `SCROLL_LOCK_MS`）。
+ * 滚动同步复刻 VS Code 内置 Markdown 预览：`data-line` 锚点 + 几何二分插值 +
+ * 三层防回环锁（webview 计数器 / 宿主 `isScrolling` / 两侧 50ms 节流），细节见 `./scrollSync.ts`。
+ * 宿主侧锁与节流请用 `scrollSync.ts` 导出的 `HOST_SCROLL_LOCK_MS` / `SCROLL_THROTTLE_MS`。
  *
  * 宿主 HTML 不需要提供任何元素：缺失时前端会自建
  * `#tuack-preview-status` / `#tuack-preview-scroller` / `#tuack-preview-content`，
@@ -22,15 +23,17 @@
 import DOMPurify from "dompurify";
 
 import {
-	SCROLL_LOCK_MS,
 	isHostToPreviewMessage,
 	resolveAssetUri,
 	type PreviewToHostMessage,
 	type PreviewUpdateMessage,
 } from "./protocol";
 import {
+	SCROLL_THROTTLE_MS,
+	createScrollLock,
+	createThrottle,
+	getEditorLineNumberForPageOffset,
 	getLineForNode,
-	getLineNumberForPageOffset,
 	scrollToRevealLine,
 } from "./scrollSync";
 
@@ -63,8 +66,14 @@ class PreviewPanel {
 	private readonly content: HTMLElement;
 
 	private generation = -1;
-	private scrollLockUntil = 0;
-	private scrollFrame: number | undefined;
+	/** 锚点结构缓存的重建令牌：每次 `update` 换一个值。 */
+	private layoutToken = 0;
+	/** 第 1 层锁：程序化滚动期间丢弃 scroll 事件。 */
+	private readonly scrollLock = createScrollLock();
+	/** 第 3 层：50ms 节流合并滚动回报（位置在节流回调里才算，避免每次 scroll 都读几何）。 */
+	private readonly reportThrottle = createThrottle<void>(SCROLL_THROTTLE_MS, () => {
+		this.reportScroll(this.currentTopLine());
+	});
 	private lastReportedLine: number | null | undefined;
 	private restoreLine: number | null = null;
 
@@ -86,6 +95,15 @@ class PreviewPanel {
 				this.post({ type: "requestUpdate", reason: "visible" });
 			}
 		});
+		// 几何缓存按 layoutToken 失效：尺寸变化（含图片加载后的 reflow）要重新测量。
+		window.addEventListener("resize", () => this.invalidateLayout());
+		if (typeof ResizeObserver !== "undefined") {
+			new ResizeObserver(() => this.invalidateLayout()).observe(this.content);
+		}
+	}
+
+	private invalidateLayout(): void {
+		this.layoutToken += 1;
 	}
 
 	/** 启动：告诉扩展"脚本已就绪"，等它回一条全量 `update`。 */
@@ -132,6 +150,9 @@ class PreviewPanel {
 		// 替换内容前记录当前位置，避免刷新后跳回顶部。
 		const previousLine = this.currentTopLine();
 		this.generation = message.generation;
+		this.layoutToken += 1;
+		this.scrollLock.reset();
+		this.reportThrottle.cancel();
 
 		// DOMPurify 是浏览器里的权威消毒（扩展侧的白名单预过滤只是第一道）。
 		// RETURN_DOM_FRAGMENT：直接拿 DocumentFragment 插入，不用 innerHTML。
@@ -170,35 +191,38 @@ class PreviewPanel {
 
 	/** 当前视口顶部对应的预览行。 */
 	private currentTopLine(): number | null {
-		return getLineNumberForPageOffset(this.scroller, VIEWPORT_TOP_OFFSET);
+		return getEditorLineNumberForPageOffset(
+			this.scroller,
+			this.content,
+			VIEWPORT_TOP_OFFSET,
+			this.layoutToken,
+		);
 	}
 
 	private onScroll(): void {
-		if (this.scrollFrame !== undefined) {
+		// 锁的判定放在事件入口（内置 `scrollDisabledCount` 同款）：锁定期内的事件直接丢。
+		if (this.scrollLock.locked) {
 			return;
 		}
-		// 用 rAF 节流：滚动事件可能每帧多次触发。
-		this.scrollFrame = window.requestAnimationFrame(() => {
-			this.scrollFrame = undefined;
-			// 锁定期内是我们自己在滚（或刚滚完），不要回报，否则会和编辑器互相打架。
-			if (Date.now() < this.scrollLockUntil) {
-				return;
-			}
-			const line = this.currentTopLine();
-			if (line === this.lastReportedLine) {
-				return;
-			}
-			this.lastReportedLine = line;
-			this.post({ type: "scroll", line });
-			this.vscode.setState({ line } satisfies PersistedState);
-		});
+		this.reportThrottle.call();
 	}
 
-	/** 编辑器 → 预览：滚动到某个预览行；并在锁定期内抑制反向回报。 */
-	private scrollToLine(line: number, behavior: ScrollBehavior): void {
-		this.scrollLockUntil = Date.now() + SCROLL_LOCK_MS;
+	private reportScroll(line: number | null): void {
+		// 节流的 trailing 可能落在锁定期内，这里再判一次。
+		if (this.scrollLock.locked || line === this.lastReportedLine) {
+			return;
+		}
 		this.lastReportedLine = line;
-		scrollToRevealLine(this.scroller, this.content, line, behavior);
+		this.post({ type: "scroll", line });
+		this.vscode.setState({ line } satisfies PersistedState);
+	}
+
+	/** 编辑器 → 预览：滚动到某个预览行；程序化滚动期间抑制反向回报。 */
+	private scrollToLine(line: number, behavior: ScrollBehavior): void {
+		this.scrollLock.acquire();
+		this.reportThrottle.cancel();
+		this.lastReportedLine = Math.floor(line);
+		scrollToRevealLine(this.scroller, this.content, line, behavior, this.layoutToken);
 	}
 
 	// ── 点击事件 ────────────────────────────────────────────────────────────
