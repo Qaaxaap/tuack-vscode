@@ -19,19 +19,17 @@
     }
   ],
   "definitions": {
-    "renderSwitches": {
-      "use_pretest": {
-        "type": "boolean",
-        "markdownDescription": "是否包含预测试数据点。可被上层覆盖。"
-      },
-      "noi_style": {
-        "type": "boolean",
-        "markdownDescription": "是否使用 NOI 风格题面。可被上层覆盖。"
-      },
-      "file_io": {
-        "type": "boolean",
-        "markdownDescription": "是否使用文件输入输出。可被上层覆盖。"
-      }
+    "usePretest": {
+      "type": "boolean",
+      "markdownDescription": "是否包含预测试数据点。可被上层覆盖。"
+    },
+    "noiStyle": {
+      "type": "boolean",
+      "markdownDescription": "是否使用 NOI 风格题面。可被上层覆盖。"
+    },
+    "fileIo": {
+      "type": "boolean",
+      "markdownDescription": "是否使用文件输入输出。可被上层覆盖。注意 tuack-ng 在未显式配置时按 `true` 处理，因此用标准输入输出的题解需要显式设为 `false`。"
     },
     "argValue": {
       "anyOf": [{ "type": "integer" }, { "type": "number" }, { "type": "string" }, { "type": "boolean" }]
@@ -52,9 +50,9 @@
           "description": "场次目录列表（相对本目录）。",
           "default": []
         },
-        "use_pretest": { "$ref": "#/definitions/renderSwitches/use_pretest" },
-        "noi_style": { "$ref": "#/definitions/renderSwitches/noi_style" },
-        "file_io": { "$ref": "#/definitions/renderSwitches/file_io" }
+        "use-pretest": { "$ref": "#/definitions/usePretest" },
+        "noi-style": { "$ref": "#/definitions/noiStyle" },
+        "file-io": { "$ref": "#/definitions/fileIo" }
       }
     },
     "day": {
@@ -91,9 +89,9 @@
           "minItems": 6,
           "maxItems": 6
         },
-        "use_pretest": { "$ref": "#/definitions/renderSwitches/use_pretest" },
-        "noi_style": { "$ref": "#/definitions/renderSwitches/noi_style" },
-        "file_io": { "$ref": "#/definitions/renderSwitches/file_io" }
+        "use-pretest": { "$ref": "#/definitions/usePretest" },
+        "noi-style": { "$ref": "#/definitions/noiStyle" },
+        "file-io": { "$ref": "#/definitions/fileIo" }
       }
     },
     "problem": {
