@@ -22,8 +22,9 @@
  *   `requestUpdate`（reason `"visible"`）让扩展补一次**全量** `update`；
  * - 全量 `update` 带 `generation` 单调序号，前端据此丢弃过期消息；
  * - 前端不自己导航：点链接/图片只发消息，交给扩展决定。
- * - **滚动锁定**：任一方向主动发起滚动后，`SCROLL_LOCK_MS` 窗口内忽略反方向事件，
- *   避免两边互相打架（内置预览同样处理）。两侧都应使用这个常量。
+ * - **滚动锁定**：任一方向主动发起滚动后，在锁定窗口内忽略反方向事件，避免两边互相打架
+ *   （与内置 Markdown 预览一致）。窗口时长与节流参数定义在 `src/webview/scrollSync.ts`：
+ *   `HOST_SCROLL_LOCK_MS`（宿主侧锁）、`SCROLL_THROTTLE_MS`（两侧节流）。
  *
  * 本文件不含 DOM 与 VS Code API，扩展侧与 webview 侧都可以安全 import。
  */
@@ -33,8 +34,9 @@ import { isSafeUrl } from "../features/preview/sanitize";
 /** `createWebviewPanel` 的 viewType（`activationEvents: onWebviewPanel:tuack.preview`）。 */
 export const PREVIEW_VIEW_TYPE = "tuack.preview";
 
-/** 滚动锁定窗口（毫秒）：主动滚动后这段时间内忽略反方向事件。 */
-export const SCROLL_LOCK_MS = 100;
+// 滚动锁定与节流的时长常量已迁到 `src/webview/scrollSync.ts`
+// （`HOST_SCROLL_LOCK_MS` / `SCROLL_THROTTLE_MS`），它们来自对 VS Code 内置
+// Markdown 预览实现的核对，因此与滚动算法放在一起，避免两处定义漂移。
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 扩展 → 预览面板

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
 	PREVIEW_VIEW_TYPE,
-	SCROLL_LOCK_MS,
 	isHostToPreviewMessage,
 	isPreviewToHostMessage,
 	normalizeWarnings,
@@ -14,9 +13,8 @@ describe("常量与行号约定", () => {
 		expect(PREVIEW_VIEW_TYPE).toBe("tuack.preview");
 	});
 
-	it("滚动锁定窗口为 100ms（两侧共用）", () => {
-		expect(SCROLL_LOCK_MS).toBe(100);
-	});
+	// 滚动锁定/节流的时长断言在 scrollSync.test.ts（常量与算法同处一地，
+	// 避免在协议模块里重复定义后两边漂移）。
 });
 
 describe("resolveAssetUri：图片 URI 改写", () => {
