@@ -1,0 +1,224 @@
+/*
+ * 题面预览面板样式。
+ *
+ * 全部用 VS Code 主题 CSS 变量（`--vscode-*`），因此自动跟随浅色/深色/高对比度主题，
+ * 前端不需要 JS 参与换肤。宿主 HTML 只需 `<link rel="stylesheet" href="<webview URI>">`。
+ */
+
+html,
+body {
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	background: var(--vscode-editor-background);
+	color: var(--vscode-editor-foreground);
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size, 13px);
+}
+
+body {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+/* ── 滚动容器 ───────────────────────────────────────────────────────────── */
+
+.tuack-preview-scroller {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	scrollbar-color: var(--vscode-scrollbarSlider-background) transparent;
+}
+
+.tuack-preview-content {
+	box-sizing: border-box;
+	max-width: 52rem;
+	margin: 0 auto;
+	padding: 1rem 1.5rem 60vh;
+	line-height: var(--vscode-editor-line-height, 1.6);
+	word-wrap: break-word;
+}
+
+/* ── 状态条 ─────────────────────────────────────────────────────────────── */
+
+.tuack-preview-status {
+	flex: 0 0 auto;
+	box-sizing: border-box;
+	max-height: 8rem;
+	overflow: auto;
+	margin: 0;
+	padding: 0.5rem 0.75rem;
+	border-bottom: 1px solid var(--vscode-panel-border, transparent);
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+	color: var(--vscode-descriptionForeground);
+	font-size: 0.9em;
+	white-space: pre-wrap;
+}
+
+.tuack-preview-status[data-state='error'] {
+	background: var(--vscode-inputValidation-errorBackground, var(--vscode-editorWidget-background));
+	border-bottom-color: var(--vscode-inputValidation-errorBorder, var(--vscode-panel-border));
+	color: var(--vscode-editor-foreground);
+}
+
+.tuack-preview-status[data-state='loading'] {
+	border-bottom-color: var(--vscode-progressBar-background, var(--vscode-panel-border));
+}
+
+/* ── 排版 ───────────────────────────────────────────────────────────────── */
+
+.tuack-preview-content h1,
+.tuack-preview-content h2,
+.tuack-preview-content h3,
+.tuack-preview-content h4,
+.tuack-preview-content h5,
+.tuack-preview-content h6 {
+	margin: 1.4em 0 0.6em;
+	font-weight: 600;
+	line-height: 1.3;
+}
+
+.tuack-preview-content h1 {
+	font-size: 1.8em;
+	border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+	padding-bottom: 0.2em;
+}
+
+.tuack-preview-content h2 {
+	font-size: 1.45em;
+}
+
+.tuack-preview-content h3 {
+	font-size: 1.2em;
+}
+
+.tuack-preview-content p,
+.tuack-preview-content ul,
+.tuack-preview-content ol,
+.tuack-preview-content blockquote,
+.tuack-preview-content table,
+.tuack-preview-content pre {
+	margin: 0.6em 0;
+}
+
+.tuack-preview-content a {
+	color: var(--vscode-textLink-foreground);
+	text-decoration: none;
+}
+
+.tuack-preview-content a:hover {
+	color: var(--vscode-textLink-activeForeground);
+	text-decoration: underline;
+}
+
+.tuack-preview-content ul,
+.tuack-preview-content ol {
+	padding-left: 1.6em;
+}
+
+.tuack-preview-content li + li {
+	margin-top: 0.15em;
+}
+
+.tuack-preview-content blockquote {
+	margin-left: 0;
+	padding: 0.1em 1em;
+	border-left: 4px solid var(--vscode-textBlockQuote-border, rgba(128, 128, 128, 0.4));
+	background: var(--vscode-textBlockQuote-background);
+	color: var(--vscode-descriptionForeground);
+}
+
+.tuack-preview-content hr {
+	border: none;
+	border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+	margin: 1.2em 0;
+}
+
+/* ── 代码 ───────────────────────────────────────────────────────────────── */
+
+.tuack-preview-content code {
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: var(--vscode-editor-font-size, 0.95em);
+	background: var(--vscode-textCodeBlock-background);
+	border-radius: 3px;
+	padding: 0.1em 0.3em;
+}
+
+.tuack-preview-content pre {
+	overflow: auto;
+	padding: 0.75em 1em;
+	background: var(--vscode-textCodeBlock-background);
+	border: 1px solid var(--vscode-panel-border, transparent);
+	border-radius: 4px;
+}
+
+.tuack-preview-content pre code {
+	background: transparent;
+	padding: 0;
+	border-radius: 0;
+}
+
+/* ── 表格 ───────────────────────────────────────────────────────────────── */
+
+.tuack-preview-content table {
+	border-collapse: collapse;
+	display: block; /* 超宽表格横向滚动而不是撑破面板 */
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+.tuack-preview-content th,
+.tuack-preview-content td {
+	border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+	padding: 0.35em 0.7em;
+}
+
+.tuack-preview-content th {
+	background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.12));
+	font-weight: 600;
+}
+
+/* markdown-it 用 style="text-align:…" 表达表格对齐；DOMPurify 可能丢掉 style 属性，
+   因此 render.ts 会同时写 data-align，这里按属性兜底，保证对齐不漂。 */
+.tuack-preview-content th[data-align='left'],
+.tuack-preview-content td[data-align='left'] {
+	text-align: left;
+}
+
+.tuack-preview-content th[data-align='right'],
+.tuack-preview-content td[data-align='right'] {
+	text-align: right;
+}
+
+.tuack-preview-content th[data-align='center'],
+.tuack-preview-content td[data-align='center'] {
+	text-align: center;
+}
+
+.tuack-preview-content th[data-align='justify'],
+.tuack-preview-content td[data-align='justify'] {
+	text-align: justify;
+}
+
+.tuack-preview-content tbody tr:nth-child(2n) {
+	background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.06));
+}
+
+/* ── 图片 ───────────────────────────────────────────────────────────────── */
+
+.tuack-preview-content img {
+	max-width: 100%;
+	height: auto;
+	cursor: pointer;
+}
+
+.tuack-preview-content img.tuack-missing-asset,
+.tuack-preview-content img:not([src]) {
+	/* 资源解析失败：给一块可见的占位而不是空白 */
+	display: inline-block;
+	min-width: 3rem;
+	min-height: 1.2rem;
+	border: 1px dashed var(--vscode-editorWarning-foreground, rgba(255, 165, 0, 0.7));
+	border-radius: 3px;
+}
