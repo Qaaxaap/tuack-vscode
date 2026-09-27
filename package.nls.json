@@ -1,0 +1,57 @@
+{
+  "extension.description": "Develop competitive-programming problems in VS Code: contest structure, live statement preview, judging and rendering.",
+  "view.contest.name": "Contest Project",
+  "view.contest.welcome": "No Tuack contest found in this workspace.\nThe project root should contain a `conf.json` with `\"folder\": \"contest\"`.\n[New contest project](command:tuack.gen.contest)\n[Open contest project…](command:tuack.openContest)\n[Diagnose environment](command:tuack.diagnose)",
+
+  "command.diagnose": "Diagnose Environment",
+  "command.showLogs": "Show Logs",
+  "command.refresh": "Refresh Project",
+  "command.openContest": "Open Contest Project…",
+  "command.revealInTree": "Reveal in Contest Tree",
+
+  "command.preview.show": "Open Statement Preview",
+  "command.preview.showToSide": "Open Statement Preview to the Side",
+  "command.preview.refresh": "Refresh Statement Preview",
+
+  "command.ren.run": "Render Statement…",
+  "command.ren.list": "List Render Templates",
+
+  "command.test.run": "Judge Problem…",
+
+  "command.doc.check": "Check Statement",
+  "command.doc.format": "Format Statement",
+  "command.doc.validate": "Validate Configuration",
+
+  "command.gen.contest": "New Contest Project…",
+  "command.gen.day": "New Contest Day…",
+  "command.gen.problem": "New Problem…",
+  "command.gen.data": "Generate Test Data",
+  "command.gen.samples": "Generate Samples",
+  "command.gen.code": "Index Solution Code",
+  "command.gen.all": "Generate Everything",
+  "command.gen.lfs": "Configure Git LFS",
+
+  "command.dmk.gen": "Generate Data (dmk)",
+  "command.dmk.regen": "Regenerate Data (dmk)",
+  "command.dmk.reset": "Reset Generator Seeds (dmk)",
+  "command.validate": "Validate Input Data",
+  "command.dump": "Export to Judge System…",
+
+  "config.title": "Tuack",
+  "config.rpcPath.description": "Path to the `tuack-ng-rpc` executable. Leave empty to auto-detect: workspace `tools/`, then `PATH`.",
+  "config.typstPath.description": "Path to the `typst` executable (needed for PDF rendering). Leave empty to auto-detect from `PATH`.",
+  "config.assetsPath.description": "Directory containing tuack-ng's assets (`langs.json` and `templates/`). Leave empty to use tuack-ng's own search order.",
+  "config.preview.engine.description": "Markdown engine used by the statement preview.",
+  "config.preview.engine.bundled": "Use the markdown-it bundled with this extension (recommended: stable output).",
+  "config.preview.engine.vscode-markdown": "Use VS Code's built-in Markdown renderer (experimental: affected by user settings and other extensions).",
+  "config.preview.debounceMs.description": "Debounce in milliseconds before refreshing the preview after an edit.",
+  "config.preview.saveBeforePreview.description": "Save the statement before previewing. `ren/preview` reads from disk, so unsaved edits do not appear in the preview when this is disabled.",
+  "config.preview.defaultTemplate.description": "Default render template name (matches `assets/templates/<name>.json` in tuack-ng). Leave empty for tuack-ng's default template.",
+  "config.preview.openBeside.description": "Open the preview in a side column.",
+  "config.test.watchdogMinutes.description": "Judging watchdog: if no output arrives for this long, treat the judge process as stuck and terminate it.",
+  "config.doc.checkOnSave.description": "Run `doc check` automatically when a statement is saved and report the result in the Problems panel.",
+  "config.logLevel.description": "Log level of the Tuack output channel.",
+
+  "capabilities.untrustedWorkspaces.description": "Tuack runs local programs such as tuack-ng and typst, so related features are disabled in untrusted workspaces.",
+  "capabilities.virtualWorkspaces.description": "Tuack needs a real file system and child processes."
+}

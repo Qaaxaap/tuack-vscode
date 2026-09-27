@@ -1,0 +1,57 @@
+{
+  "extension.description": "在 VS Code 中开发 OI / ACM 竞赛题目：工程结构、题面实时预览、评测与渲染。",
+  "view.contest.name": "竞赛工程",
+  "view.contest.welcome": "未在当前工作区找到 Tuack 竞赛工程。\n工程根目录应包含一个 `conf.json`（`\"folder\": \"contest\"`）。\n[新建竞赛工程](command:tuack.gen.contest)\n[打开竞赛工程…](command:tuack.openContest)\n[环境诊断](command:tuack.diagnose)",
+
+  "command.diagnose": "环境诊断",
+  "command.showLogs": "显示日志",
+  "command.refresh": "刷新工程",
+  "command.openContest": "打开竞赛工程…",
+  "command.revealInTree": "在工程树中显示",
+
+  "command.preview.show": "打开题面预览",
+  "command.preview.showToSide": "在侧边打开题面预览",
+  "command.preview.refresh": "刷新题面预览",
+
+  "command.ren.run": "渲染题面…",
+  "command.ren.list": "列出渲染模板",
+
+  "command.test.run": "评测题目…",
+
+  "command.doc.check": "检查题面",
+  "command.doc.format": "格式化题面",
+  "command.doc.validate": "校验配置",
+
+  "command.gen.contest": "新建竞赛工程…",
+  "command.gen.day": "新建场次…",
+  "command.gen.problem": "新建题目…",
+  "command.gen.data": "生成测试数据",
+  "command.gen.samples": "生成样例",
+  "command.gen.code": "索引题解代码",
+  "command.gen.all": "生成全部",
+  "command.gen.lfs": "配置 Git LFS",
+
+  "command.dmk.gen": "造数据（dmk）",
+  "command.dmk.regen": "重新造数据（dmk）",
+  "command.dmk.reset": "重置造数据种子（dmk）",
+  "command.validate": "校验输入数据",
+  "command.dump": "导出到评测系统…",
+
+  "config.title": "Tuack",
+  "config.rpcPath.description": "`tuack-ng-rpc` 可执行文件的路径。留空时自动探测：工作区 `tools/`，然后是 `PATH`。",
+  "config.typstPath.description": "`typst` 可执行文件的路径（渲染 PDF 所需）。留空时从 `PATH` 自动探测。",
+  "config.assetsPath.description": "tuack-ng 的 assets 目录（需含 `langs.json` 与 `templates/`）。留空时使用 tuack-ng 自身的查找顺序。",
+  "config.preview.engine.description": "题面预览使用的 Markdown 渲染引擎。",
+  "config.preview.engine.bundled": "使用本扩展内置的 markdown-it（推荐，输出稳定）。",
+  "config.preview.engine.vscode-markdown": "使用 VS Code 内置 Markdown 渲染器（实验性：受用户设置与其它扩展影响）。",
+  "config.preview.debounceMs.description": "编辑后触发预览刷新的防抖时间（毫秒）。",
+  "config.preview.saveBeforePreview.description": "预览前保存题面。`ren/preview` 读取的是磁盘内容，关闭此项时未保存的编辑不会出现在预览中。",
+  "config.preview.defaultTemplate.description": "默认渲染模板名（对应 tuack-ng 的 `assets/templates/<名字>.json`）。留空时使用 tuack-ng 的默认模板。",
+  "config.preview.openBeside.description": "在侧边列打开预览。",
+  "config.test.watchdogMinutes.description": "评测看门狗：超过该时长没有任何输出，则认为评测进程卡死并终止它。",
+  "config.doc.checkOnSave.description": "保存题面时自动运行 `doc check`，并把结果写入「问题」面板。",
+  "config.logLevel.description": "Tuack 输出通道的日志级别。",
+
+  "capabilities.untrustedWorkspaces.description": "Tuack 会执行 tuack-ng、typst 等本机程序，因此在不受信任的工作区中相关功能会被禁用。",
+  "capabilities.virtualWorkspaces.description": "Tuack 需要真实的文件系统与子进程。"
+}
