@@ -1,0 +1,97 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Tuack Jinja (fenced code 注入)",
+  "scopeName": "tuack.jinja.fenced",
+  "comment": "为 ```jinja / ```jinja2 围栏代码块提供高亮。VS Code 内置 markdown 没有 jinja grammar，因此这里自带一份精简规则。",
+  "injectionSelector": "L:markup.fenced_code.block.markdown",
+  "patterns": [
+    {
+      "begin": "^(\\s*)(`{3,}|~{3,})\\s*(jinja2?|j2)\\b.*$",
+      "end": "^(\\s*)(`{3,}|~{3,})\\s*$",
+      "beginCaptures": {
+        "2": { "name": "punctuation.definition.fenced.jinja.tuack" },
+        "3": { "name": "fenced_code.block.language.jinja.tuack" }
+      },
+      "endCaptures": {
+        "2": { "name": "punctuation.definition.fenced.jinja.tuack" }
+      },
+      "contentName": "meta.embedded.block.jinja.tuack",
+      "patterns": [{ "include": "#jinja" }]
+    }
+  ],
+  "repository": {
+    "jinja": {
+      "patterns": [
+        { "include": "#jinja-comment" },
+        { "include": "#jinja-expression" },
+        { "include": "#jinja-statement" }
+      ]
+    },
+    "jinja-comment": {
+      "name": "comment.block.jinja.tuack",
+      "begin": "\\{#",
+      "end": "#\\}"
+    },
+    "jinja-expression": {
+      "name": "meta.embedded.line.jinja.tuack",
+      "begin": "\\{\\{",
+      "end": "\\}\\}",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.template-expression.begin.jinja.tuack" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.template-expression.end.jinja.tuack" }
+      },
+      "patterns": [{ "include": "#jinja-inner" }]
+    },
+    "jinja-statement": {
+      "name": "meta.embedded.line.jinja.tuack",
+      "begin": "\\{%",
+      "end": "%\\}",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.template-statement.begin.jinja.tuack" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.template-statement.end.jinja.tuack" }
+      },
+      "patterns": [
+        {
+          "name": "keyword.control.jinja.tuack",
+          "match": "\\b(if|elif|else|endif|for|endfor|set|endset|macro|endmacro|include|import|raw|endraw|with|endwith|filter|endfilter|block|endblock|extends)\\b"
+        },
+        { "include": "#jinja-inner" }
+      ]
+    },
+    "jinja-inner": {
+      "patterns": [
+        {
+          "name": "keyword.control.jinja.tuack",
+          "match": "\\b(if|else|for|in|not|and|or|is|none|true|false|None|True|False)\\b"
+        },
+        {
+          "name": "constant.numeric.jinja.tuack",
+          "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+        },
+        {
+          "name": "string.quoted.double.jinja.tuack",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [{ "name": "constant.character.escape.jinja.tuack", "match": "\\\\." }]
+        },
+        {
+          "name": "string.quoted.single.jinja.tuack",
+          "begin": "'",
+          "end": "'",
+          "patterns": [{ "name": "constant.character.escape.jinja.tuack", "match": "\\\\." }]
+        },
+        { "name": "punctuation.separator.jinja.tuack", "match": "[|,.:]" },
+        {
+          "name": "support.function.jinja.tuack",
+          "match": "\\b(sample|statement|tools|problem|day|contest)\\b"
+        },
+        { "name": "variable.other.jinja.tuack", "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b" },
+        { "name": "keyword.operator.jinja.tuack", "match": "[=+\\-*/%<>!]=?|~" }
+      ]
+    }
+  }
+}
