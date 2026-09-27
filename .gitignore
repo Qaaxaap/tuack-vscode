@@ -129,3 +129,8 @@ result-sample.csv
 # ── Python（scripts/ 下的辅助脚本，参考 tuack-gui）─────────────
 __pycache__/
 *.py[cod]
+
+# ── Nix（flake.lock 要入库，指向 store 的软链不入库）────────────
+result
+result-*
+# .direnv/ 见上方 tuack 生态段
