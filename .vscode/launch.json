@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "运行扩展",
+      "name": "Run Extension",
       "type": "extensionHost",
       "request": "launch",
       "args": [
@@ -14,7 +14,7 @@
       "preLaunchTask": "watch"
     },
     {
-      "name": "运行扩展（打开测试工程）",
+      "name": "Run Extension with Test Project",
       "type": "extensionHost",
       "request": "launch",
       "args": [
@@ -27,7 +27,7 @@
       "preLaunchTask": "watch"
     },
     {
-      "name": "运行扩展测试",
+      "name": "Run Extension Tests",
       "type": "extensionHost",
       "request": "launch",
       "testConfiguration": "${workspaceFolder}/.vscode-test.mjs",
