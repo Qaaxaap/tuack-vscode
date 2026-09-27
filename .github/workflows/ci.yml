@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: 类型检查 / 单测 / 构建
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 类型检查
+        run: pnpm run check-types
+
+      - name: 单元测试
+        run: pnpm run test:unit
+
+      - name: 构建
+        run: pnpm run build
+
+      - name: 打包冒烟（确认 VSIX 里没有源码与 .cache）
+        run: |
+          pnpm exec vsce package --no-dependencies -o /tmp/tuack-vscode.vsix
+          python3 - <<'PY'
+          import zipfile, sys
+          with zipfile.ZipFile("/tmp/tuack-vscode.vsix") as z:
+              names = z.namelist()
+          forbidden = [n for n in names if n.startswith("extension/src/") or ".cache/" in n]
+          if forbidden:
+              print("VSIX 里出现了不应打进去的文件：", forbidden)
+              sys.exit(1)
+          print(f"VSIX 文件数：{len(names)}（已确认不含 src/ 与 .cache/）")
+          PY
