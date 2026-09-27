@@ -78,21 +78,52 @@ src/
 - **渲染的临时目录由扩展负责清理**：tuack-ng 用 `TempDir::keep()` 创建产物目录且不回收。
 - **实时预览只保证 Markdown 语义一致**，不保证排版与最终 PDF 一致——`ren/preview`（MiniJinja 展开）与 `ren/run`（AST → Typst）是两条不同的管线。
 - 因 `ren/preview` 只读磁盘，预览前会先保存文件；这一点在上游为 `ren/preview` 增加文本入参后可以去掉。
+- **`file-io` 未显式配置时按 `true` 处理**：用标准输入输出的题解会被判 RE/FE，需要在 day/contest 里显式写 `"file-io": false`。
+
+### 用真实二进制实测发现的「文档/代码 vs 线上」不一致
+
+单元测试用的是「真子进程 + 假 NDJSON 服务端」，能覆盖进程、分帧与事件时序，但掩盖不了「我们对协议的理解与服务端实际行为不一致」。下面这些是用上游 `rpc` 分支编译出的真二进制跑出来的（复现方式见 [src/test/integration/README.md](src/test/integration/README.md)，完整报告在 `.cache/research/rpc-smoke-report.md`）。**已在本仓库修掉的用 ✅ 标注，其余是上游待修。**
+
+| # | 现象 | 我们的处理 |
+| --- | --- | --- |
+| D1 | conf.json 的真实键名是 `use-pretest` / `noi-style` / `file-io`（kebab），而 `PROTOCOL.md` 附录与线上 `config/schema` 都写 snake_case；写 snake_case 会被静默忽略，而 `config/set` 仍返回成功并递增 revision | ✅ 本仓库 schema 已改为 kebab |
+| D2 | `problem/get` 的 `data[].id` / `samples[].id` 是 **number**，`run/judge` 的 `testId` 只接受 **string** | ✅ 类型已改为 number，并在注释里要求调用点 `String(id)` |
+| D3 | `JudgeResult.message` 在 `RE` / `TLE` 时是 **null**，而协议文档写 string | ✅ 类型已改为 `string \| null` |
+| D4 | `workspace/close` 之后 `run/get` 返回 `-32001`（会话不存在），不是 `-32006` | 待上游确认 |
+| D5 | `ren/preview` 会把每行行首的**一个空格吃掉**（上游按行做 `strip_prefix(' ')`），缩进代码块与嵌套列表的缩进因此被破坏；`lineMap` 行号不受影响 | 待上游修；预览因此可能与成稿有细微差异 |
+| D6 | `config/set` 对未知字段静默丢弃，revision 照增，调用方无法区分「设成功」与「被吞」 | 待上游修 |
+| D7 | `ren/run` 的 `files[]` 会含目录项与重复项 | 消费时按文件过滤去重 |
+| D8 | `assets` 的「`<工作区>/assets`」这一候选与实测不符：debug 构建读的是**编译期源码树**的 `assets/`，工作目录下的 `assets/langs.json` 会被忽略 | 已在 `src/core/assets.ts` 的文档中标注 |
+| D9 | 服务端 schema 声明 draft-07 却使用 `$defs` / `#/$defs/...` | 待上游修 |
+| D10 | `run/finished` 的 `error` 字段总是显式 `null` | 消费时不依赖它 |
+| D11 | `lineMap.source` 的上界是「行数 + 1」（尾换行会多出一段空段） | 换算时按上界裁剪 |
+
+被实测**证实**的假设同样重要：`run/started` 确实早于 `run/create` 的响应（所以早到事件缓冲是必要的）、judge 的 `run/output` 早于响应、不传 `template` 的 `ren/preview` 确实不读模板、`ren/get.tmpDir` 确实需要调用方自己删、`seq` 单调递增、以及两进程下 P1 在 P2 评测期间仍能响应 `ren/preview`。
 
 ## 对 tuack-ng 的建议（按优先级）
 
-这些是让 IDE 集成更完整所需的协议能力，本扩展当前只能绕行或降级：
+### 修 bug（按危害排序）
 
-1. **`ren/preview` 支持直接传入题面文本** —— 消除「预览前必须先保存」，才能真正做到边改边看。
-2. **新增 `doc/check` RPC 方法** —— 题面检查的结果（`span` / `secondary_span` / `importance` / `info` / `note`）在 tuack-ng 内部已经是结构化的，只是目前仅以 ANSI 文本写到 stderr、且退出码恒为 0。加一个 JSON 出口即可让 IDE 显示到「问题」面板。
-3. **枚举渲染模板与导出器**（如 `ren/templates`），并恢复 CLI 的 `ren --list`。
-4. **把 `gen` / `dmk` / `validate` / `dump` / `doc` 纳入 RPC** —— 目前只能起子进程并解析人类可读输出。
-5. **`ren/run` 支持 SVG 输出** —— Typst 原生支持逐页 SVG，在 webview 里可直接内联，省掉 PDF 预览的 worker / CSP / wasm 一类问题，而且 SVG 元素可点击，便于做源码与预览的联动。
-6. **`run/judge` 可中断**，或改为异步加事件。
-7. **`config/set` 使用临时文件加 rename 的原子写**，并让 `revision` 具有跨进程语义（当前是进程级，跨进程乐观并发不成立）。
-8. **`ren/run` 的顶层临时目录不要 `keep()`**，或提供清理方法。
-9. **把 typst 作为 Rust 库链接进 `tuack-ng-rpc`** —— 需要跨平台分发的二进制就从两个减少到一个。
-10. **非 TTY 环境下自动关闭 `indicatif`**（或提供 `--no-progress`），避免进度控制序列混进日志。
+1. **`ren/preview` 不要吃掉行首空格**（D5）—— 现在会破坏缩进代码块与嵌套列表的缩进，直接影响预览正确性。
+2. **统一 conf.json 的键名与 `config/schema` 的键名**（D1）—— 目前 schema 与实际解析不一致，用户按 schema 写配置会被静默忽略；`config/set` 还会假报成功。顺带修 `PROTOCOL.md` 附录。
+3. **`problem/get` 的 id 类型与 `run/judge` 的 `testId` 对齐**（D2），**`message` 允许 null**（D3）—— 否则每个客户端都要自己踩一遍。
+4. **`config/set` 对未知字段报错而不是静默丢弃**（D6）。
+5. **`ren/run` 的 `files[]` 去掉目录项与重复项**（D7）。
+6. **schema 要么改成 draft-07 兼容写法，要么声明 2019-09+**（D9）。
+
+### 补能力
+
+7. **`ren/preview` 支持直接传入题面文本** —— 消除「预览前必须先保存」，才能真正做到边改边看。
+8. **新增 `doc/check` RPC 方法** —— 题面检查的结果（`span` / `secondary_span` / `importance` / `info` / `note`）在 tuack-ng 内部已经是结构化的，只是目前仅以 ANSI 文本写到 stderr、且退出码恒为 0。加一个 JSON 出口即可让 IDE 显示到「问题」面板。
+9. **枚举渲染模板与导出器**（如 `ren/templates`），并恢复 CLI 的 `ren --list`。
+10. **把 `gen` / `dmk` / `validate` / `dump` / `doc` 纳入 RPC** —— 目前只能起子进程并解析人类可读输出。
+11. **`run/judge` 可中断**，或改为异步加事件。
+12. **`config/set` 使用临时文件加 rename 的原子写**，并让 `revision` 具有跨进程语义（当前是进程级，跨进程乐观并发不成立）。
+13. **`ren/run` 的顶层临时目录不要 `keep()`**，或提供清理方法。
+14. **把 typst 作为 Rust 库链接进 `tuack-ng-rpc`** —— 需要跨平台分发的二进制就从两个减少到一个。
+15. **非 TTY 环境下自动关闭 `indicatif`**（或提供 `--no-progress`），避免进度控制序列混进日志。
+
+（`ren/run` 支持 SVG 输出是个加分项：Typst 原生支持逐页 SVG，在 webview 里可直接内联，省掉 PDF 预览的 worker / CSP / wasm 一类问题，而且 SVG 元素可点击，便于做源码与预览联动。本扩展当前用 `vscode.open` 打开 PDF，装了 PDF 插件时由插件渲染，所以不急。）
 
 ## 许可证
 
