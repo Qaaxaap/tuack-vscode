@@ -1,25 +1,11 @@
 /**
- * 轻量白名单 HTML 消毒器。
+ * 白名单 HTML 消毒器，零依赖纯函数。webview 里的 DOMPurify 才是权威防线，这里是 Node 侧预过滤。
  *
- * 定位：**纵深防御**。预览的主渲染器（`render.ts`）已经用 `markdown-it` 的
- * `html: false` 关掉了原始 HTML，因此正常链路上不会有攻击面；但
- * - 未来的渲染引擎（`tuack.preview.engine = vscode-markdown`）会原样透传 HTML；
- * - 题面里可能出现 `</p><script>` 之类的边界输入；
- * - 前端 `innerHTML` 之前再过一遍，成本极低。
- *
- * 设计约束：
- * - **零依赖、纯函数**（可以被 vitest 直接测，也能被 webview bundle 复用）。
- * - 白名单而非黑名单：只保留明确列出的标签/属性；`on*` 事件处理器、
- *   未知属性、命名空间属性一律丢弃。
- * - URL：只允许无 scheme 的相对路径与本文件列出的 scheme；
- *   `javascript:` / `vbscript:` / `data:text/html` 一类全部拒绝。
- * - 不抛错：任何畸形输入（未闭合标签、裸 `<`、注释未闭合）都退化为转义文本。
- *
- * 注意：本模块**不是**通用 sanitizer（如 DOMPurify）的替代品。它只处理
- * 「渲染器自己产出的 HTML + 一点点不可信文本」这个场景。
+ * 白名单而非黑名单：on* 事件、未知属性、命名空间属性一律丢；URL 只放行相对路径和列出的 scheme，
+ * javascript: / data:text/html 全部拒绝。畸形输入不抛错，退化成转义文本。
  */
 
-/** 允许出现的标签（都必须是"无副作用"的排版标签）。 */
+/** 允许的标签，都是无副作用的排版标签。 */
 const ALLOWED_TAGS: ReadonlySet<string> = new Set([
 	"a",
 	"abbr",
@@ -83,12 +69,7 @@ const ALLOWED_TAGS: ReadonlySet<string> = new Set([
 	"wbr",
 ]);
 
-/**
- * 这些标签**连同内容**一起丢弃。
- *
- * 前一批是可执行/可加载外部资源的内容（原始文本元素，浏览器不会解析其中的标签）；
- * 后一批是虽不执行脚本、但留在文档里没有意义甚至有害的元数据标签。
- */
+/** 连内容一起丢的标签：script/style 这类原始文本元素，以及不执行脚本但没用的元数据标签。 */
 const STRIP_CONTENT_TAGS: ReadonlySet<string> = new Set([
 	"applet",
 	"base",
@@ -114,7 +95,7 @@ const STRIP_CONTENT_TAGS: ReadonlySet<string> = new Set([
 	"xmp",
 ]);
 
-/** HTML void 元素：不需要（也不应该）输出结束标签。 */
+/** HTML void 元素，不输出结束标签。 */
 const VOID_TAGS: ReadonlySet<string> = new Set([
 	"area",
 	"base",
@@ -132,7 +113,7 @@ const VOID_TAGS: ReadonlySet<string> = new Set([
 	"wbr",
 ]);
 
-/** 所有标签都允许的属性（`data-*` 另行按需放行）。 */
+/** 所有标签都允许的属性；data-* 另行放行。 */
 const GLOBAL_ATTRIBUTES: readonly string[] = ["class", "dir", "lang", "title"];
 
 /** 逐标签的额外属性白名单。 */
@@ -147,29 +128,29 @@ const TAG_ATTRIBUTES: Readonly<Record<string, readonly string[]>> = {
 	time: ["datetime"],
 };
 
-/** 需要做 URL 校验的属性；未列出的属性按普通文本处理。 */
+/** 需要做 URL 校验的属性，其余按普通文本处理。 */
 const URL_ATTRIBUTES: ReadonlyMap<string, UrlKind> = new Map<string, UrlKind>([
 	["href", "href"],
 	["cite", "href"],
 	["src", "src"],
 ]);
 
-/** URL 的性质：链接（可 mailto 等）还是资源（可 data:image）。 */
+/** 链接可 mailto 等，资源可 data:image。 */
 type UrlKind = "href" | "src";
 
-/** `href` 允许的 scheme（无 scheme 的相对路径另行放行）。 */
+/** href 允许的 scheme；相对路径另行放行。 */
 const HREF_SCHEMES: ReadonlySet<string> = new Set([
 	"http",
 	"https",
 	"mailto",
 	"tel",
-	// webview 资源 URI：扩展侧改写图片后可能出现，保留以兼容 vscode-markdown 引擎。
+	// webview 资源 URI：vscode-markdown 引擎会把图片改写成这类 URL。
 	"vscode-cdn",
 	"vscode-resource",
 	"vscode-webview-resource",
 ]);
 
-/** `src` 允许的 scheme。 */
+/** src 允许的 scheme。 */
 const SRC_SCHEMES: ReadonlySet<string> = new Set([
 	"http",
 	"https",
@@ -179,44 +160,41 @@ const SRC_SCHEMES: ReadonlySet<string> = new Set([
 	"vscode-webview-resource",
 ]);
 
-/** `data:` 只允许这几种图片 MIME（`data:text/html` 这类必须拒绝）。 */
+/** data: 只放行 base64 图片。 */
 const DATA_IMAGE_PATTERN = /^data:image\/(?:png|jpe?g|gif|webp|avif|bmp);base64,[a-z0-9+/=\s]*$/i;
 
-/**
- * `style` 只允许这几个属性。markdown-it 的表格对齐会输出
- * `style="text-align:left"`，是我们唯一需要保留的样式。
- */
+/** style 只保留 text-align，markdown-it 的表格对齐就靠它。 */
 const SAFE_STYLE_PROPERTIES: ReadonlySet<string> = new Set(["text-align"]);
 const SAFE_STYLE_VALUES = /^(?:left|right|center|justify|start|end)$/i;
 
-/** 允许出现的无值属性（HTML 布尔属性）。 */
+/** 允许的无值属性。 */
 const BOOLEAN_ATTRIBUTES: ReadonlySet<string> = new Set(["reversed"]);
 
 export interface SanitizeOptions {
-	/** 在默认白名单之外额外允许的标签（小写）。 */
+	/** 额外允许的标签，小写。 */
 	extraTags?: readonly string[];
-	/** 是否允许 `data-*` 属性（默认 `true`；`data-source-line` 依赖它）。 */
+	/** 是否允许 data-*，默认 true；data-line 依赖它。 */
 	allowDataAttributes?: boolean;
 }
 
 export interface SanitizeReport {
 	html: string;
-	/** 被丢弃的标签名（小写，按出现顺序，可重复）。 */
+	/** 被丢弃的标签名，小写，按出现顺序，可重复。 */
 	removedTags: string[];
-	/** 被丢弃的属性名（小写，按出现顺序，可重复）。 */
+	/** 被丢弃的属性名，小写，按出现顺序，可重复。 */
 	removedAttributes: string[];
 	/** 被拒绝的 URL 原值。 */
 	blockedUrls: string[];
 }
 
-/** 判断 URL 是否可以保留。`kind` 决定允许的 scheme 集合。 */
+/** URL 是否放行；kind 决定可用的 scheme 集合。 */
 export function isSafeUrl(raw: string, kind: UrlKind): boolean {
-	// 浏览器在解析 URL 前会先做实体解码、并忽略 scheme 内部的空白与控制字符，
-	// 因此这里也必须先归一化，否则 `java&#x73;cript:` / `java\tscript:` 会绕过检查。
+	// 浏览器解析 URL 前会先做实体解码、忽略 scheme 里的空白与控制字符，这里也要先归一化，
+	// 否则 java&#x73;cript: 能绕过检查。
 	const normalized = decodeEntities(raw).replace(/[\u0000-\u0020\u007f]/g, "");
 	const schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(normalized);
 	if (!schemeMatch) {
-		// 相对路径、锚点、协议相对 URL（`//host/...` 按 http(s) 处理）。
+		// 无 scheme：相对路径、锚点、协议相对 URL。
 		return true;
 	}
 	const scheme = (schemeMatch[1] ?? "").toLowerCase();
@@ -226,16 +204,12 @@ export function isSafeUrl(raw: string, kind: UrlKind): boolean {
 	return kind === "src" ? SRC_SCHEMES.has(scheme) : HREF_SCHEMES.has(scheme);
 }
 
-/** 便捷包装：只要消毒后的 HTML。 */
+/** 只要消毒后的 HTML。 */
 export function sanitizeHtml(input: string, options?: SanitizeOptions): string {
 	return sanitizeHtmlWithReport(input, options).html;
 }
 
-/**
- * 消毒并返回统计信息。
- *
- * 幂等：`sanitize(sanitize(x)) === sanitize(x)`（除统计字段外）。
- */
+/** 消毒并返回统计。幂等：sanitize(sanitize(x)) === sanitize(x)。 */
 export function sanitizeHtmlWithReport(input: string, options: SanitizeOptions = {}): SanitizeReport {
 	const report: SanitizeReport = {
 		html: "",
@@ -262,7 +236,7 @@ export function sanitizeHtmlWithReport(input: string, options: SanitizeOptions =
 			out.push(input.slice(index, lt));
 		}
 
-		// 注释 / doctype / CDATA / 处理指令：整段丢弃（注释里可能藏条件注释脚本）。
+		// 注释 / doctype / CDATA / 处理指令整段丢弃，注释里可能藏条件注释脚本。
 		if (input.startsWith("<!--", lt)) {
 			const end = input.indexOf("-->", lt + 4);
 			if (end < 0) break;
@@ -278,7 +252,7 @@ export function sanitizeHtmlWithReport(input: string, options: SanitizeOptions =
 
 		const match = /^<(\/?)([a-zA-Z][a-zA-Z0-9:_.-]*)/.exec(input.slice(lt));
 		if (!match) {
-			// 裸 `<`（例如 `1 < 2`）：转义后原样输出。
+			// 裸 `<` 按文本转义。
 			out.push("&lt;");
 			index = lt + 1;
 			continue;
@@ -289,7 +263,7 @@ export function sanitizeHtmlWithReport(input: string, options: SanitizeOptions =
 		const attrStart = lt + match[0].length;
 		const tagEnd = findTagEnd(input, attrStart);
 		if (tagEnd < 0) {
-			// 未闭合的标签：按文本处理，避免吞掉后续内容。
+			// 未闭合的标签按文本处理，避免吞掉后续内容。
 			out.push("&lt;");
 			index = lt + 1;
 			continue;
@@ -320,7 +294,7 @@ export function sanitizeHtmlWithReport(input: string, options: SanitizeOptions =
 	return report;
 }
 
-/** 从 `from` 起找到不在引号内的 `>`；找不到返回 -1。 */
+/** 从 from 起找不在引号内的 >；找不到返回 -1。 */
 function findTagEnd(input: string, from: number): number {
 	let quote: string | null = null;
 	for (let i = from; i < input.length; i += 1) {
@@ -342,7 +316,7 @@ function findTagEnd(input: string, from: number): number {
 	return -1;
 }
 
-/** 跳过 `</name ...>` 之后的位置；没有结束标签时返回字符串末尾。 */
+/** 跳过 </name ...> 之后的位置；没有结束标签就返回末尾。 */
 function skipToClosingTag(input: string, name: string, from: number): number {
 	const lower = input.toLowerCase();
 	const closing = lower.indexOf(`</${name}`, from);
@@ -353,7 +327,7 @@ function skipToClosingTag(input: string, name: string, from: number): number {
 	return gt < 0 ? input.length : gt + 1;
 }
 
-/** 解析并过滤属性；返回 `[name, value]` 列表。 */
+/** 解析并过滤属性，返回 [name, value] 列表。 */
 function filterAttributes(
 	tag: string,
 	text: string,
@@ -373,12 +347,12 @@ function filterAttributes(
 			report.removedAttributes.push(name);
 		};
 
-		// 事件处理器：白名单本来就挡住了，这里显式记录以便观测。
+		// 事件处理器；白名单本来就挡得住，记一笔方便观测。
 		if (name.startsWith("on")) {
 			reject();
 			continue;
 		}
-		// 命名空间属性（`xlink:href` 等）可能绕过普通 URL 检查，一律丢弃。
+		// 命名空间属性可能绕过 URL 检查，一律丢。
 		if (name.includes(":")) {
 			reject();
 			continue;
@@ -422,7 +396,7 @@ function filterAttributes(
 	return result;
 }
 
-/** 只保留 `text-align` 一类的安全声明；没有可用声明时返回 `null`。 */
+/** 只保留 text-align；没有可用声明时返回 null。 */
 function sanitizeStyleValue(value: string): string | null {
 	const kept: string[] = [];
 	for (const declaration of value.split(";")) {
@@ -448,7 +422,7 @@ function renderOpenTag(name: string, attributes: readonly (readonly [string, str
 	return `<${name}${rendered}>`;
 }
 
-/** 转义属性值；已经成形的实体不再二次转义（避免 `&amp;` 变成 `&amp;amp;`）。 */
+/** 转义属性值；已经成形的实体不二次转义，&amp; 别变成 &amp;amp;。 */
 function escapeAttribute(value: string): string {
 	return value
 		.replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;")
@@ -475,7 +449,7 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
 	tab: "\t",
 };
 
-/** 解码常见实体（用于 URL scheme 判定，不影响输出）。 */
+/** 解码常见实体，只用于 URL scheme 判定。 */
 function decodeEntities(value: string): string {
 	return value.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);/g, (whole, body: string) => {
 		if (body.startsWith("#")) {
