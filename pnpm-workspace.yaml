@@ -1,0 +1,6 @@
+# pnpm 11 起，依赖构建脚本的放行列表在这里（不再读 package.json 的 "pnpm" 字段）。
+# - esbuild：postinstall 需要下载平台二进制，否则 esbuild 命令不可用。
+# - @vscode/vsce-sign：VSIX 签名相关；无 TTY 时默认构建会被忽略。
+allowBuilds:
+  "@vscode/vsce-sign": true
+  esbuild: true
