@@ -1,9 +1,10 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Tuack 配置文件（conf.json）",
-  "description": "Tuack-NG 的 conf.json。同一文件名会在竞赛工程（contest）/场次（day）/题目（problem）三个层级出现，靠 `folder` 字段区分。",
+  "description": "同一个 conf.json 用于 contest / day / problem 三层，按 `folder` 区分。",
   "type": "object",
   "defaultSnippets": [],
+  "$comment": "每个 if 都要带 required: [\"folder\"]，否则缺 folder 的文档会命中第一个分支。",
   "anyOf": [
     {
       "if": { "required": ["folder"], "properties": { "folder": { "const": "contest" } } },
@@ -29,7 +30,7 @@
     },
     "fileIo": {
       "type": "boolean",
-      "markdownDescription": "是否使用文件输入输出。可被上层覆盖。注意 tuack-ng 在未显式配置时按 `true` 处理，因此用标准输入输出的题解需要显式设为 `false`。"
+      "markdownDescription": "未配置时按 `true` 处理；用标准输入输出的题解要显式设为 `false`。"
     },
     "argValue": {
       "anyOf": [{ "type": "integer" }, { "type": "number" }, { "type": "string" }, { "type": "boolean" }]
@@ -103,7 +104,7 @@
         "folder": { "const": "problem" },
         "type": {
           "enum": ["program", "output", "interactive"],
-          "description": "题目类型。interactive 需要额外配置 interactive 字段。"
+          "description": "题目类型；选 interactive 时还需配 grader/header。"
         },
         "name": { "type": "string", "description": "题目英文名（目录名，也是提交文件名）。" },
         "title": { "type": "string", "description": "题目中文标题。" },
@@ -114,7 +115,7 @@
         },
         "memory limit": {
           "type": "string",
-          "description": "内存限制，字节大小字符串，如 \"512 MiB\" 或 \"256MB\"。读回时会被规范化为二进制单位。"
+          "description": "字节大小字符串（如 \"512 MiB\"、\"256MB\"）；读回时规范化为二进制单位。"
         },
         "dmk": {
           "enum": ["skip", "input", "output", "on"],
@@ -170,7 +171,7 @@
         },
         "data": {
           "type": "array",
-          "description": "数据点列表。id 可以是单个整数，也可以是整数数组（表示一个捆绑包，共享同一份生成参数）。",
+          "description": "id 为整数或整数数组；数组表示捆绑包，共享同一份生成参数。",
           "default": [],
           "items": {
             "type": "object",
@@ -200,7 +201,7 @@
         },
         "tests": {
           "type": "object",
-          "description": "测试者（题解 / 暴力 / 标程）列表，键为标识名。",
+          "description": "键为标识名（题解 / 暴力 / 标程）。",
           "default": {},
           "additionalProperties": {
             "type": "object",

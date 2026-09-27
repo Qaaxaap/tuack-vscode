@@ -13,7 +13,7 @@
       let
         pkgs = import nixpkgs { inherit system; };
 
-        # 与 CI 保持一致：node 22 + pnpm 11
+        # node 22 + pnpm 11
         nodejs = pkgs.nodejs_22;
         pnpm = pkgs.pnpm_11;
       in
@@ -32,8 +32,7 @@
           '';
         };
 
-        # 额外带上编译上游 tuack-ng 与渲染 PDF 需要的工具，
-        # 供跑真二进制的集成冒烟（src/test/integration）使用。
+        # 额外带上编译上游 tuack-ng 与渲染 PDF 的工具（见 src/test/integration）。
         devShells.full = pkgs.mkShell {
           packages = [
             nodejs

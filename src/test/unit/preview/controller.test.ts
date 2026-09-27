@@ -1,19 +1,7 @@
 /**
- * 预览控制器单测。
- *
- * 这里**不 mock `vscode` 模块**（vitest 里根本没有它）：控制器只依赖
- * `PreviewEnvironment` / `PreviewHostFactory` / `PreviewRpc` 三个注入接口，
- * 测试用假实现注入，把「真正需要 VS Code 的部分」隔离在 `panel.ts`。
- *
- * 锁住的行为（都是本项目最容易踩的坑）：
- * - `ren/preview` 只读磁盘 → `tuack.preview.saveBeforePreview` 决定是否先保存；
- * - `scope` 必须精确到 `<day>/<problem>`（从 conf.json 向上找，不猜路径）；
- * - 不传 `template` 时零 assets/templates 依赖；配了才传；
- * - `ren/preview` 是同步 handler → **in-flight 单飞 + 尾随合并**；
- * - `conf.json` 变化 → 先 `config/reload` 再 preview；
- * - 面板消息必须过 `isPreviewToHostMessage`；行号在扩展侧做双向换算；
- * - `SCROLL_LOCK_MS`（旧 100ms）已由 `scrollSync.ts` 的 `HOST_SCROLL_LOCK_MS`（200ms）
- *   与 `SCROLL_THROTTLE_MS`（50ms）取代：锁定期内忽略编辑器可见行回声，其后按 URI 节流合并。
+ * 预览控制器单测。不 mock vscode，改用注入的 PreviewEnvironment / PreviewHostFactory / PreviewRpc。
+ * 锁住：ren/preview 只读磁盘（先保存）、scope 要精确到 <day>/<problem>、它是同步 handler
+ * （单飞 + 尾随合并）、conf.json 变化先 config/reload。
  */
 
 import * as fs from "node:fs";
@@ -638,7 +626,7 @@ describe("in-flight 单飞", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// conf.json → config/reload
+// conf.json 变化时先 config/reload
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("conf.json 变化", () => {
@@ -697,7 +685,7 @@ describe("滚动同步", () => {
 		return harness;
 	}
 
-	it("预览 → 编辑器：用 sourceForRendered 换算后 revealRange", async () => {
+	it("预览行换算编辑器行：用 sourceForRendered 换算后 revealRange", async () => {
 		const { controller, env, hosts } = await setupScrollSync();
 		hosts.host.receive({ type: "scroll", line: 3 });
 		await tick();
@@ -705,15 +693,15 @@ describe("滚动同步", () => {
 		controller.dispose();
 	});
 
-	it("编辑器 → 预览：HOST_SCROLL_LOCK_MS 内忽略回声，之后照常回报", async () => {
+	it("编辑器行换算预览行：HOST_SCROLL_LOCK_MS 内忽略回声，之后照常回报", async () => {
 		const { controller, env, hosts } = await setupScrollSync();
 
-		// 面板发起滚动 → 控制器 reveal 编辑器，记下锁起点。
+		// 面板发起滚动：控制器 reveal 编辑器并记下锁起点。
 		hosts.host.receive({ type: "scroll", line: 3 });
 		await tick();
 		expect(env.revealed).toHaveLength(1);
 
-		// 编辑器可见行回声（同一时刻，锁定期内）：必须被忽略。
+		// 锁定期内的编辑器可见行回声必须被忽略。
 		env.fireVisibleRange(new FakeUri(fixture.statementPath), 1);
 		await sleep(SCROLL_THROTTLE_MS + 20);
 		expect(hosts.host.messagesOfType("scrollToLine")).toHaveLength(0);
@@ -745,7 +733,7 @@ describe("滚动同步", () => {
 		await sleep(SCROLL_THROTTLE_MS + 20);
 		const flushed = hosts.host.messagesOfType("scrollToLine");
 		expect(flushed).toHaveLength(1);
-		// 编辑器第 2 行 → lineMap {source:1→rendered:1, source:5→rendered:3} 回退到 rendered 1。
+		// 编辑器第 2 行不在 lineMap 中（source 1 对 rendered 1、source 5 对 rendered 3），回退到 rendered 1。
 		expect(flushed[0]?.type === "scrollToLine" ? flushed[0].line : -1).toBe(1);
 		controller.dispose();
 	});

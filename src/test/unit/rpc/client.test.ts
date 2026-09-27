@@ -1,8 +1,6 @@
 /**
- * 单进程客户端测试：id 分配/不复用、超时、错误码映射、通知分发、能力门控、生命周期。
- *
- * 用真实的 `NdjsonTransport` + 两个 `PassThrough` 当「假 stdio 服务端」，
- * 因此同时覆盖了分帧 → 客户端 → 关联的整条链路。
+ * 单进程客户端测试：id 分配、超时、错误码映射、通知分发、能力门控、生命周期。
+ * 用真 NdjsonTransport + 两个 PassThrough 当假 stdio 服务端，顺带覆盖分帧链路。
  */
 
 import { PassThrough } from "node:stream";
@@ -25,7 +23,7 @@ class FakeServer {
 	readonly fromServer = new PassThrough();
 	readonly requests: { id?: unknown; method: string; params?: unknown }[] = [];
 	private pendingLine = "";
-	/** 每条请求的处理函数；返回 `undefined` 表示不响应（用于超时测试）。 */
+	/** 每条请求的处理函数；返回 `undefined` 表示不响应。 */
 	handler: ((request: { id?: unknown; method: string; params?: unknown }) => unknown | undefined) | undefined;
 
 	constructor() {
@@ -114,7 +112,7 @@ function initializeHandler(capabilities: string[] = ALL_CAPABILITIES) {
 	};
 }
 
-/** 只答应 `initialize`，其余请求故意不响应（用于超时/pending 测试）。 */
+/** 只答应 `initialize`，其余请求故意不响应。 */
 function initializeOnly(capabilities: string[] = ALL_CAPABILITIES) {
 	const base = initializeHandler(capabilities);
 	return (request: { id?: unknown; method: string }): unknown =>
@@ -155,7 +153,7 @@ describe("RpcClient 请求/响应", () => {
 		expect(client.state).toBe("closed");
 	});
 
-	it("服务端错误 → 带 code/data 的 TuackRpcError", async () => {
+	it("服务端错误转成带 code/data 的 TuackRpcError", async () => {
 		const { client, server } = makeClient();
 		server.handler = (request) => {
 			if (request.method === "run/judge") {
@@ -209,7 +207,7 @@ describe("RpcClient 超时与 id 复用", () => {
 		server.handler = initializeOnly();
 		await client.initialize();
 
-		// 第 2 个请求不响应 → 超时
+		// 第 2 个请求不响应，等超时
 		const slow = client.call("config/get", { sessionId: "s-1" });
 		await expect(slow).rejects.toSatisfy((error: unknown) => isRpcError(error, LocalErrorCode.Timeout));
 		const timeoutError = (await slow.catch((e: unknown) => e)) as TuackRpcError;
@@ -282,7 +280,7 @@ describe("RpcClient 通知与事件", () => {
 });
 
 describe("RpcClient 能力门控与生命周期", () => {
-	it("initialize 之前调用其它方法 → LifecycleViolation", async () => {
+	it("initialize 之前调用其它方法报 LifecycleViolation", async () => {
 		const { client } = makeClient();
 		const error = await client.call("config/get", { sessionId: "s-1" }).catch((e: unknown) => e);
 		expect(isRpcError(error, LocalErrorCode.LifecycleViolation)).toBe(true);

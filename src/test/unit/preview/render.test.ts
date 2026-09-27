@@ -14,7 +14,7 @@ describe("renderMarkdown：data-line 锚点", () => {
 		expect(result.html).toContain('<h2 data-line="3">标题</h2>');
 		expect(result.html).toContain('<li data-line="5">a</li>');
 		expect(result.html).toContain('<li data-line="6">b</li>');
-		// 末位是文末哨兵：行数 7 → data-line 8。
+		// 末位是文末哨兵：7 行正文对应 data-line 8。
 		expect(result.anchors).toEqual([1, 3, 5, 6, 8]);
 	});
 
@@ -59,7 +59,7 @@ describe("renderMarkdown：data-line 锚点", () => {
 	});
 
 	it("正文末尾追加文末哨兵（指向 行数 + 1）", () => {
-		// "a\n\nb" 共 3 行 → 哨兵 data-line = 4（与内置 markdownDocument.lineCount + 1 同义）。
+		// "a\n\nb" 共 3 行，哨兵 data-line = 4（同内置 markdownDocument.lineCount + 1）。
 		const result = renderMarkdown("a\n\nb");
 		expect(result.html).toContain('<div class="code-line" data-line="4"></div>');
 		expect(result.anchors.at(-1)).toBe(4);
@@ -101,7 +101,7 @@ describe("renderMarkdown：安全", () => {
 
 	it("javascript: 链接不会变成可点击的 href", () => {
 		// markdown-it 的 validateLink 会把 javascript: 链接退化成纯文本；
-		// 即便它漏出来，消毒器也会把 href 整个丢掉（第二道防线）。
+		// 即便它漏出来，消毒器也会把 href 整个丢掉。
 		const result = renderMarkdown('[x](javascript:alert(1))\n');
 		expect(result.html).not.toContain('href="javascript');
 		expect(result.html).not.toContain("<a ");
@@ -154,7 +154,7 @@ describe("renderMarkdown：健壮性", () => {
 		expect(renderMarkdownToHtml(markdown)).toBe(renderMarkdown(markdown).html);
 	});
 
-	it("重复渲染同一输入结果稳定（渲染器可复用）", () => {
+	it("重复渲染同一输入结果稳定", () => {
 		const first = renderMarkdown("a\n\nb\n");
 		const second = renderMarkdown("a\n\nb\n");
 		expect(second).toEqual(first);

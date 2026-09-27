@@ -133,7 +133,7 @@ describe("findBoundsForLine：正方向定位", () => {
 	});
 });
 
-describe("lineForPageOffset：预览位置 → 行号", () => {
+describe("lineForPageOffset：从预览位置求行号", () => {
 	it("普通块之间线性插值", () => {
 		const pair = { previous: block(1, 0, 20), next: block(3, 60, 20) };
 		expect(lineForPageOffset(pair, 0)).toBe(1);
@@ -175,7 +175,7 @@ describe("lineForPageOffset：预览位置 → 行号", () => {
 	});
 });
 
-describe("pageOffsetForLine：行号 → 预览位置（三档插值）", () => {
+describe("pageOffsetForLine：从行号求预览位置（三档插值）", () => {
 	it("第 2 档：previous 底边与 next 顶边之间插值", () => {
 		const pair = { previous: block(1, 0, 20), next: block(3, 60, 20) };
 		expect(pageOffsetForLine(pair, 1)).toBe(0);
@@ -237,7 +237,7 @@ describe("createScrollLock：第 1 层防回环锁", () => {
 		expect(lock.locked).toBe(false);
 	});
 
-	it("连续 acquire 的抑制窗口按 50 → 100 → 200ms 递增", () => {
+	it("连续 acquire 的抑制窗口按 50、100、200ms 递增", () => {
 		const timers = createFakeTimers();
 		const lock = createScrollLock(SCROLL_LOCK_DELAYS_MS, timers);
 
@@ -270,7 +270,7 @@ describe("createScrollLock：第 1 层防回环锁", () => {
 		expect(lock.locked).toBe(false);
 	});
 
-	it("空档位表不会挂死（用 0ms 兜底）", () => {
+	it("空档位表不会挂死，按 0ms 兜底", () => {
 		const timers = createFakeTimers();
 		const lock = createScrollLock([], timers);
 		lock.acquire();

@@ -100,9 +100,9 @@ src/
 
 被实测**证实**的假设同样重要：`run/started` 确实早于 `run/create` 的响应（所以早到事件缓冲是必要的）、judge 的 `run/output` 早于响应、不传 `template` 的 `ren/preview` 确实不读模板、`ren/get.tmpDir` 确实需要调用方自己删、`seq` 单调递增、以及两进程下 P1 在 P2 评测期间仍能响应 `ren/preview`。
 
-## 对 tuack-ng 的建议（按优先级）
+## 对 tuack-ng 的建议
 
-### 修 bug（按危害排序）
+### 修 bug
 
 1. **`ren/preview` 不要吃掉行首空格**（D5）—— 现在会破坏缩进代码块与嵌套列表的缩进，直接影响预览正确性。
 2. **统一 conf.json 的键名与 `config/schema` 的键名**（D1）—— 目前 schema 与实际解析不一致，用户按 schema 写配置会被静默忽略；`config/set` 还会假报成功。顺带修 `PROTOCOL.md` 附录。

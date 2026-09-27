@@ -1,13 +1,6 @@
 /**
- * NDJSON 分帧测试。
- *
- * 重点（都是真会导致线上事故的 case）：
- * - 一行被切成多个 chunk；
- * - **多字节 UTF-8 跨 chunk**；
- * - 一个 chunk 里有多行；
- * - 空行 / CRLF / BOM；
- * - 非法 JSON 只记错、不打断流；
- * - 超长行丢弃后能重新同步。
+ * NDJSON 分帧测试：跨 chunk 的行与多字节字符、空行/CRLF/BOM、
+ * 非法 JSON 可恢复、超长行丢弃后重新同步。
  */
 
 import { PassThrough } from "node:stream";
@@ -134,7 +127,7 @@ describe("NdjsonTransport", () => {
 		expect(h.transport.bytesReceived).toBeGreaterThan(0);
 	});
 
-	it("非法 JSON 走 onParseError 且**不打断**后续消息（可恢复）", async () => {
+	it("非法 JSON 走 onParseError 且不打断后续消息（可恢复）", async () => {
 		const h = harness();
 		h.input.write("这不是 JSON\n");
 		h.input.write('{"jsonrpc":"2.0","id":1,"result":null}\n');
@@ -161,7 +154,7 @@ describe("NdjsonTransport", () => {
 		await tick();
 		expect(h.parseErrors).toHaveLength(1);
 		expect(h.parseErrors[0]?.kind).toBe("overflow");
-		// 后续数据仍然能解析（重新同步）
+		// 后续数据仍然能解析
 		h.input.write("\n");
 		h.input.write('{"jsonrpc":"2.0","id":7,"result":null}\n');
 		await tick();

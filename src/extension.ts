@@ -1,16 +1,7 @@
 /**
- * 扩展入口。
+ * 扩展入口：只做组装，业务逻辑在 `features/` 与 `rpc/`。
  *
- * 职责分工（各阶段的接入点已在下方标注）：
- * - 阶段 0（Lead）：激活、日志、工作区事件、命令注册骨架。
- * - 阶段 1：`rpc/` 的进程与传输层（RpcPool / RpcClient）在此装配。
- * - 阶段 2：预览控制器与 webview 宿主（`features/preview/*`）。
- * - 阶段 3：结构树 provider 与 conf.json 诊断。
- * - 阶段 4：测试控制器与 CLI 通道。
- * - 阶段 5：环境诊断面板、语言支持。
- *
- * 注意：本文件只做「组装」，不承载具体业务逻辑。
- * 用户可见字符串一律走 `vscode.l10n.t()`（见 `l10n/`；控制器拿到的 `translate` 就是它）。
+ * 用户可见字符串走 `vscode.l10n.t()`（控制器拿到的 `translate` 就是它）。
  */
 
 import * as vscode from "vscode";
@@ -29,7 +20,7 @@ import {
 	registerPreviewSerializer,
 } from "./features/preview/panel";
 
-/** 供 `deactivate()` 回收（模块级，因为 deactivate 拿不到 activate 的闭包）。 */
+/** 供 `deactivate()` 回收；deactivate 拿不到 activate 的闭包，所以放模块级。 */
 let activeController: PreviewController | undefined;
 let activePool: RpcPool | undefined;
 
@@ -56,7 +47,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		logger.debug(`  folder: ${folder.uri.toString()}${folder.name ? ` (${folder.name})` : ""}`);
 	}
 
-	// 上一实例崩溃 / 被强杀时可能留下 `tuack-ng-*` 临时目录；启动时顺手清理（保守策略见 process.ts）。
+	// 上一实例崩溃/被强杀可能留下 `tuack-ng-*` 临时目录；保守清理策略见 process.ts。
 	void cleanupStaleTempDirs()
 		.then((result) => {
 			if (result.removed.length > 0) {
@@ -69,8 +60,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
 	// ── RPC 池装配：惰性 spawn，避免「只是打开一个工程」就拉起子进程 ──────────
 	//
-	// 池在构造时就固定 `workspaceUri`，而竞赛工程根要等题面定位出来才知道，
-	// 所以这里用 `ensurePool()` 做「按需创建 / 换根重建」，控制器只依赖 `PreviewRpc` 接口。
+	// 池构造时就固定 `workspaceUri`，而工程根要等题面定位出来才知道；所以按需创建、换根重建。
 	interface PoolHandle {
 		pool: RpcPool;
 		workspaceUri: string;
@@ -91,7 +81,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		});
 		const assets = await inspectAssets({ overridePath: assetsPath, workspaceRoot });
 
-		// tuack-ng 只在 `data_local_dir()/tuack-ng` 里找 langs.json；用 XDG_DATA_HOME / LOCALAPPDATA 注入。
+		// tuack-ng 只在 data_local_dir()/tuack-ng 里找 langs.json，所以用 XDG_DATA_HOME / LOCALAPPDATA 注入。
 		let assetsEnv: NodeJS.ProcessEnv = {};
 		if (assets.dir !== null) {
 			const direct = buildAssetsEnv(assets.dir);
@@ -144,7 +134,7 @@ export function activate(context: vscode.ExtensionContext): void {
 					return handle;
 				},
 				(error: unknown) => {
-					// 失败不缓存：用户改完 tuack.rpcPath 后重试应当真的重试。
+					// 失败不缓存，改完 tuack.rpcPath 重试能真的重试。
 					handlePromise = undefined;
 					throw error;
 				},
@@ -153,7 +143,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
 		const created = await handlePromise;
 		if (created.workspaceUri !== workspaceUri) {
-			// 用户在另一个竞赛工程里打开了预览：回收旧池（含 P1/P2 进程树），为新根重建。
+			// 换了竞赛工程：回收旧池（含 P1/P2 进程树）再重建。
 			logger.info("[preview] 竞赛工程根变化，回收旧 RPC 池并重建。");
 			handlePromise = undefined;
 			handle = undefined;
@@ -208,19 +198,19 @@ export function activate(context: vscode.ExtensionContext): void {
 			outputChannel().show();
 		}),
 
-		// 阶段 5：由 core/diagnose.ts 提供真实实现（列出二进制、assets、模板、进程与最近错误码）。
+		// 阶段 5：core/diagnose.ts 会给出真实实现。
 		vscode.commands.registerCommand("tuack.diagnose", () => {
 			outputChannel().show();
 			logger.info("diagnose: not wired up yet (planned stage 5)");
 			notImplementedYet("tuack.diagnose");
 		}),
 
-		// 阶段 3：由 features/tree 提供真实实现。
+		// 阶段 3：features/tree 会给出真实实现。
 		vscode.commands.registerCommand("tuack.refresh", () => {
 			notImplementedYet("tuack.refresh");
 		}),
 
-		// ── 预览命令（阶段 2b） ─────────────────────────────────────────────
+		// ── 预览命令 ────────────────────────────────────────────────────────
 		vscode.commands.registerCommand("tuack.preview.show", () => controller.showActive({ beside: false })),
 
 		vscode.commands.registerCommand("tuack.preview.showToSide", () => controller.showActive({ beside: true })),

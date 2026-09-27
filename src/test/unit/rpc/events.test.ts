@@ -1,7 +1,6 @@
 /**
- * 事件路由测试：早到事件缓冲/回放、seq 缺口检测、事件总线、能力映射。
- *
- * 「`run/started` 先于 `runId` 响应」是协议事实，这里锁住回放行为。
+ * 事件路由测试：早到事件缓冲/回放、seq 缺口、事件总线、能力映射。
+ * `run/started` 先于 `runId` 响应是协议事实，这里锁住回放行为。
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -55,7 +54,7 @@ describe("事件辅助函数", () => {
 		expect(streamIdFromResult("run/create", null)).toBeNull();
 	});
 
-	it("方法 → capability 映射", () => {
+	it("方法到 capability 的映射", () => {
 		expect(capabilityForMethod("workspace/open")).toBe("workspace");
 		expect(capabilityForMethod("config/set")).toBe("config");
 		expect(capabilityForMethod("problem/list")).toBe("problem");
@@ -67,7 +66,7 @@ describe("事件辅助函数", () => {
 		expect(capabilityForMethod("future/thing")).toBeUndefined();
 	});
 
-	it("未知通知只归类为 unknown（调用方只记日志）", () => {
+	it("未知通知归类为 unknown，由调用方决定是否记日志", () => {
 		expect(classifyNotification({ jsonrpc: "2.0", method: "ren/pushed" })).toEqual({ kind: "unknown", method: "ren/pushed" });
 		const classified = classifyNotification({ jsonrpc: "2.0", method: "run/started" });
 		expect(classified.kind).toBe("event");

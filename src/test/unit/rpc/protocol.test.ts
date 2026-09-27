@@ -1,8 +1,6 @@
 /**
  * 协议契约测试：scope 转义、信封判定、方法/事件清单。
- *
- * 这些是上游 `tuack-ng-rpc` PROTOCOL.md §4/§5 的直接投影，错了会导致
- * `config/get` 报 `-32005`（路径不存在）或事件被误判。
+ * 对应上游 PROTOCOL.md §4/§5；转义错了 `config/get` 会报 -32005。
  */
 
 import { describe, expect, it } from "vitest";
@@ -57,7 +55,7 @@ describe("scope 转义（JSON Pointer 规则）", () => {
 	it("先转义 ~ 再转义 /", () => {
 		expect(escapeScopeSegment("a/b")).toBe("a~1b");
 		expect(escapeScopeSegment("a~b")).toBe("a~0b");
-		// 顺序很重要：先 ~ 后 /，否则 "~/" 会被转两次
+		// 必须先 ~ 后 /，否则 "~/" 会被转两次
 		expect(escapeScopeSegment("~/")).toBe("~0~1");
 		expect(escapeScopeSegment("~1")).toBe("~01");
 	});
@@ -73,7 +71,7 @@ describe("scope 转义（JSON Pointer 规则）", () => {
 		expect(unescapeScopeSegment("~01")).toBe("~1");
 	});
 
-	it("makeScope：无 day → contest", () => {
+	it("makeScope：无 day 时为 contest", () => {
 		expect(makeScope()).toBe("contest");
 		expect(makeScope(undefined, "p1")).toBe("contest");
 		expect(makeScope("", "p1")).toBe("contest");

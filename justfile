@@ -12,7 +12,7 @@ default:
 shell:
     nix develop
 
-# 进入带 rustc / typst 的开发环境（跑集成冒烟用）
+# 进入带 rustc / typst 的开发环境
 shell-full:
     nix develop .#full
 

@@ -1,13 +1,6 @@
 /**
- * 进程池测试（用假端点，不 spawn 真进程）。
- *
- * 锁住的行为：
- * - P1 常驻、P2 按需 spawn / 空闲回收 / 递增 epoch；
- * - id 命名空间化（`p1:` / `p2:<epoch>:`）与按前缀反向路由；
- * - **早到事件**（`run/started` 先于 `runId` 响应）缓冲后回放；
- * - P2 禁止 `config/set` / `config/migrate`；
- * - capabilities 门控；未知事件只记日志；
- * - session 改写（session 是进程级的，跨进程必 -32001）。
+ * 进程池测试（假端点，不 spawn 真进程）：P1 常驻 / P2 按需回收、id 命名空间化与反向路由、
+ * 早到事件回放、P2 禁写配置、capabilities 门控、session 改写。
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -242,7 +235,7 @@ describe("RpcPool 生命周期", () => {
 		await pool.dispose();
 	});
 
-	it("空闲到点回收 P2，但**在飞请求期间不回收**", async () => {
+	it("空闲到点回收 P2，但在飞请求期间不回收", async () => {
 		const { pool, created } = makePool({ p2IdleTimeoutMs: 40 });
 		await pool.call("run/create", { sessionId: "x", problem: "day1/p1", target: "data" });
 		const p2 = created[0] as FakeEndpoint;
@@ -304,7 +297,7 @@ describe("RpcPool 路由与 session 改写", () => {
 		expect(created[0]?.lastCall("ren/get")?.params).toEqual({ sessionId: "s-p1", taskId: "t-1" });
 	});
 
-	it("已回收进程的 runId → ProcessExited（run 只活在进程内存里）", async () => {
+	it("已回收进程的 runId 报 ProcessExited（run 只活在进程内存里）", async () => {
 		const { pool } = makePool();
 		await pool.call("run/create", { sessionId: "x", problem: "day1/p1", target: "data" });
 		expect(pool.isStreamAlive("run", "p2:1:r-1")).toBe(true);
@@ -369,7 +362,7 @@ describe("RpcPool 早到事件回放", () => {
 		const received: { event: RpcEvent; meta: PoolEventMeta }[] = [];
 		pool.onEvent((event, meta) => received.push({ event, meta }));
 
-		// 先建 P2（不经过 run/create），方便手动控制响应时机
+		// 先建 P2 而不过 run/create，方便手动控制响应时机
 		await pool.evaluation();
 		const p2 = created[0] as FakeEndpoint;
 		const gate = deferred<unknown>();
@@ -415,7 +408,7 @@ describe("RpcPool 早到事件回放", () => {
 
 		const createPromise = pool.call("run/create", { sessionId: "x", problem: "day1/p1", target: "data" });
 		await tick();
-		// seq 故意从 7 开始（缺口）
+		// seq 故意从 7 开始，制造缺口
 		p2.emit("run/started", { seq: 7, sessionId: "s", runId: "r-1", problem: "d/p", target: "data", tester: "std" });
 		p2.emit("run/output", { seq: 8, sessionId: "s", runId: "r-1", testId: null, channel: "judge", text: "a" });
 		p2.emit("run/ready", { seq: 9, sessionId: "s", runId: "r-1" });
@@ -430,7 +423,7 @@ describe("RpcPool 早到事件回放", () => {
 		pool.onEvent((event) => methods.push(event.method));
 		await pool.call("run/create", { sessionId: "x", problem: "day1/p1", target: "data" });
 		const p2 = created[0] as FakeEndpoint;
-		// run/started 早到 → 缓冲 → 响应后回放
+		// run/started 早到：先缓冲，响应后回放
 		p2.emit("run/started", { seq: 1, sessionId: "s", runId: "r-1", problem: "d/p", target: "data", tester: "std" });
 		p2.emit("run/finished", { seq: 2, sessionId: "s", runId: "r-1", state: "closed" });
 		expect(methods).toEqual(["run/started", "run/finished"]);
@@ -455,7 +448,7 @@ describe("RpcPool 早到事件回放", () => {
 		pool.onEvent((event) => methods.push(event.method));
 		await pool.evaluation();
 		const p2 = created[0] as FakeEndpoint;
-		// 没有任何 create 请求，事件无处归属 → 缓冲
+		// 没有 create 请求，事件无处归属，先缓冲
 		p2.emit("run/started", { seq: 1, sessionId: "s", runId: "r-404", problem: "d/p", target: "data", tester: "std" });
 		expect(methods).toHaveLength(0);
 		await pool.recycleEvaluation("test");

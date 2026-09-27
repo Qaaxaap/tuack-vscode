@@ -48,7 +48,7 @@ describe("resolveAssetUri：图片 URI 改写", () => {
 	});
 });
 
-describe("消息校验：扩展 → 预览", () => {
+describe("消息校验：扩展发给预览", () => {
 	const updateMessage = {
 		type: "update",
 		html: '<p data-line="1">x</p>',
@@ -76,7 +76,7 @@ describe("消息校验：扩展 → 预览", () => {
 	});
 });
 
-describe("消息校验：预览 → 扩展", () => {
+describe("消息校验：预览发给扩展", () => {
 	it("接受前端会发出的全部消息", () => {
 		expect(isPreviewToHostMessage({ type: "ready" })).toBe(true);
 		expect(isPreviewToHostMessage({ type: "requestUpdate", reason: "visible" })).toBe(true);

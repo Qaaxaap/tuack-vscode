@@ -1,8 +1,5 @@
-// Tuack 扩展构建脚本（esbuild，官方推荐）
-// - extension host 目标：CJS + node，external: vscode
-// - webview 目标：IIFE + browser（预览面板的前端资源）
-//
-// 官方要求 esbuild 只擦类型、不做类型检查，因此类型检查由 `pnpm check-types` 单独负责。
+// 构建脚本：扩展宿主走 CJS + node（external: vscode），webview 走 IIFE + browser。
+// esbuild 只擦类型不做类型检查，类型检查交给 `pnpm check-types`。
 
 const esbuild = require("esbuild");
 const fs = require("node:fs");

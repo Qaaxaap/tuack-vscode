@@ -1,11 +1,6 @@
 /**
- * 子进程封装测试（真实 spawn，不 mock）。
- *
- * 覆盖：
- * - 真实 NDJSON over stdio 往返（initialize → workspace/open → config/get）；
- * - 「秒退 + stdout 零字节 + stderr 有 langs.json」→ **立刻** 变成可操作诊断（不是等 initialize 超时）；
- * - 进程树 kill（含孙进程）；stderr 采集；
- * - 启动时遗留临时目录清理。
+ * 子进程封装测试，真 spawn 不 mock：stdio 往返、秒退识别、进程树 kill、stderr 采集、
+ * 遗留临时目录清理。
  */
 
 import { spawn as nodeSpawn } from "node:child_process";
@@ -130,7 +125,7 @@ async function waitForDeath(pid: number, timeoutMs = 3000): Promise<boolean> {
 }
 
 describe("spawnRpcProcess + RpcClient（真实 stdio）", () => {
-	it("initialize → workspace/open → config/get 全链路，stderr 被采集", async () => {
+	it("initialize、workspace/open、config/get 全链路，stderr 被采集", async () => {
 		const child = spawnServer();
 		const init = await child.client.initialize();
 		expect(init.protocolVersion).toBe("0.1");
@@ -149,7 +144,7 @@ describe("spawnRpcProcess + RpcClient（真实 stdio）", () => {
 
 		const info = await child.dispose();
 		expect(info.code).toBe(0);
-		// 优雅回收成功 → 客户端停在 closed（而不是 dead）
+		// 优雅回收成功后客户端停在 closed，而不是 dead
 		expect(child.client.state).toBe("closed");
 		expect(child.isRunning).toBe(false);
 	});
@@ -181,7 +176,7 @@ describe("spawnRpcProcess + RpcClient（真实 stdio）", () => {
 		await configPromise;
 
 		expect(task.taskId).toBe("p1:t-1");
-		// ren/started 与 ren/progress 都先于响应发出 → 先缓冲、响应到达后按序回放
+		// ren/started 与 ren/progress 先于响应发出：先缓冲，响应到达后按序回放
 		expect(events.map((event) => event.method)).toEqual(["ren/started", "ren/progress"]);
 		expect(events[0]).toMatchObject({ taskId: "p1:t-1" });
 		expect(pool.controlSessionId()).toBe("s-1");
@@ -204,7 +199,7 @@ describe("spawnRpcProcess + RpcClient（真实 stdio）", () => {
 		const events: RpcEvent[] = [];
 		pool.onEvent((event) => events.push(event));
 
-		// 1) 控制面先起来（只 spawn P1）
+		// 1) 控制面先起来，只 spawn P1
 		const config = await pool.call("config/get", { sessionId: "stale" });
 		expect(config.revision).toBe(0);
 		expect(pool.controlEndpoint).toBeDefined();
@@ -237,7 +232,7 @@ describe("spawnRpcProcess + RpcClient（真实 stdio）", () => {
 });
 
 describe("秒退识别（assets/langs.json 缺失）", () => {
-	it("stdout 零字节 + stderr 有 langs.json + 退出码 1 → 立刻抛可操作诊断（不等 initialize 超时）", async () => {
+	it("stdout 零字节 + stderr 有 langs.json + 退出码 1 时立刻给出诊断（不等 initialize 超时）", async () => {
 		const probed = ["/ws/assets", "/home/u/.local/share/tuack-ng", "/usr/share/tuack-ng"];
 		const started = Date.now();
 		const child = spawnRpcProcess({
@@ -270,7 +265,7 @@ describe("秒退识别（assets/langs.json 缺失）", () => {
 		const advice = data?.diagnosis.advice.join("\n") ?? "";
 		expect(advice).toContain("tuack.assetsPath");
 		expect(advice).toContain("/usr/share/tuack-ng");
-		// 「不可降级」写在 summary 里（advice 是具体步骤）
+		// 「不可降级」只写在 summary 里
 		expect(data?.diagnosis.summary).toContain("不可降级");
 
 		const info = await child.exited;
@@ -280,7 +275,7 @@ describe("秒退识别（assets/langs.json 缺失）", () => {
 		expect(renderQuickExitDiagnosis(info)).toContain("langs.json");
 	});
 
-	it("spawn 失败（ENOENT）→ SpawnFailed，且是立刻失败", async () => {
+	it("spawn 失败（ENOENT）报 SpawnFailed，且是立刻失败", async () => {
 		const started = Date.now();
 		const child = spawnRpcProcess({ command: path.join(root, "definitely-missing-binary") });
 		spawned.push(child);
@@ -292,7 +287,7 @@ describe("秒退识别（assets/langs.json 缺失）", () => {
 		expect(info.spawnError).toBeDefined();
 	});
 
-	it("普通异常退出（无 langs 关键字）→ unknown 诊断，仍带 stderr 尾巴", async () => {
+	it("普通异常退出（无 langs 关键字）归为 unknown 诊断，仍带 stderr 尾巴", async () => {
 		const child = spawnRpcProcess({
 			command: process.execPath,
 			args: ["-e", 'process.stderr.write("boom\\n"); process.exit(3);'],
@@ -359,29 +354,29 @@ describe("diagnoseQuickExit", () => {
 		};
 	}
 
-	it("stderr 命中 langs.json → assets-missing，并列出已探测目录", () => {
+	it("stderr 命中 langs.json 判为 assets-missing，并列出已探测目录", () => {
 		const diagnosis = diagnoseQuickExit(exitInfo({ stderr: "Error: 找不到 langs.json\n" }), ["/a", "/b"]);
 		expect(diagnosis.kind).toBe("assets-missing");
 		expect(diagnosis.advice.join("\n")).toContain("/a、/b");
 	});
 
-	it("stderr 命中「找不到」→ binary-missing", () => {
+	it("stderr 命中「找不到」判为 binary-missing", () => {
 		const diagnosis = diagnoseQuickExit(exitInfo({ stderr: "Error: 找不到资源\n" }));
 		expect(diagnosis.kind).toBe("binary-missing");
 	});
 
-	it("被信号杀死 → signaled", () => {
+	it("被信号杀死判为 signaled", () => {
 		const diagnosis = diagnoseQuickExit(exitInfo({ signal: "SIGKILL", code: null }));
 		expect(diagnosis.kind).toBe("signaled");
 	});
 
-	it("spawnError ENOENT → binary-missing，指引指向 tuack.rpcPath", () => {
+	it("spawnError ENOENT 判为 binary-missing，指引指向 tuack.rpcPath", () => {
 		const diagnosis = diagnoseQuickExit(exitInfo({ spawnError: new Error("spawn tuack-ng-rpc ENOENT"), code: null }));
 		expect(diagnosis.kind).toBe("binary-missing");
 		expect(diagnosis.advice.join("\n")).toContain("tuack.rpcPath");
 	});
 
-	it("什么都没有 → unknown，且提示直接在终端复现", () => {
+	it("什么都没有判为 unknown，且提示直接在终端复现", () => {
 		const diagnosis = diagnoseQuickExit(exitInfo({}));
 		expect(diagnosis.kind).toBe("unknown");
 		expect(diagnosis.advice.join("\n")).toContain("终端");

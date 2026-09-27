@@ -72,7 +72,7 @@ describe("buildLineMapIndex：归一化", () => {
 	});
 });
 
-describe("renderedForSource：编辑器 → 预览", () => {
+describe("renderedForSource：编辑器行换算预览行", () => {
 	const index = buildLineMapIndex(LOOP_LINE_MAP, [1, 8, 12, 20]);
 
 	it("精确命中", () => {
@@ -110,7 +110,7 @@ describe("renderedForSource：编辑器 → 预览", () => {
 	});
 });
 
-describe("sourceForRendered：预览 → 编辑器（含循环体 fallback）", () => {
+describe("sourceForRendered：预览行换算编辑器行（含循环体 fallback）", () => {
 	const index = buildLineMapIndex(LOOP_LINE_MAP, [1, 8, 12, 20]);
 
 	it("精确命中", () => {
@@ -140,7 +140,7 @@ describe("sourceForRendered：预览 → 编辑器（含循环体 fallback）", 
 });
 
 describe("锚点属性约定：与内置 Markdown 预览对齐", () => {
-	it("主属性名是 data-line（内置同名），旧别名仅用于读取兼容", () => {
+	it("主属性名 data-line 与内置同名，旧别名只读不写", () => {
 		expect(SOURCE_LINE_ATTRIBUTE).toBe("data-line");
 		expect(SOURCE_LINE_ATTRIBUTE_ALIAS).toBe("data-source-line");
 	});

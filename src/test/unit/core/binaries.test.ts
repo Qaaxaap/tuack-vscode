@@ -1,7 +1,6 @@
 /**
- * 二进制探测测试（四段式：设置 → 工作区 tools/ 与 <contest>/.tuack/bin/ → PATH → 明确失败）。
- *
- * 探测逻辑刻意不依赖 vscode，设置值由调用方传入，因此这里可以直接用临时目录 + 注入判定。
+ * 二进制探测测试：设置、工作区 tools/ 与 <contest>/.tuack/bin/、PATH、明确失败四段。
+ * 探测逻辑不依赖 vscode，设置值由调用方传入，所以这里用临时目录加注入判定。
  */
 
 import * as fs from "node:fs";
@@ -115,7 +114,7 @@ describe("resolveBinary 四段式", () => {
 		expect(result.path).toBe(binary);
 	});
 
-	it("第 1 段失败 → 记录 settingProblem 并回退到工作区 tools/", async () => {
+	it("第 1 段失败则记录 settingProblem 并回退到工作区 tools/", async () => {
 		const configured = path.join(root, "broken", "tuack-ng-rpc");
 		const workspaceBinary = path.join(root, "ws2", "tools", "tuack-ng-rpc");
 		const result = await resolveBinary({
@@ -223,7 +222,7 @@ describe("resolveBinary 四段式", () => {
 		expect(result.source).toBe("extra");
 	});
 
-	it("第 4 段：全部失败 → BinaryNotFoundError，probed 完整、advice 可操作", async () => {
+	it("第 4 段：全部失败报 BinaryNotFoundError，probed 完整、advice 可操作", async () => {
 		const workspaceRoot = path.join(root, "ws5");
 		const contestRoot = path.join(root, "contest5");
 		const error = await resolveBinary({

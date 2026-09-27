@@ -1,9 +1,7 @@
 /**
- * assets 探测测试。
- *
- * 顺序必须与上游 `init.rs::assets_dirs()` 一致：`<工作区>/assets`（debug）→
- * `<data_local_dir>/tuack-ng` → `/usr/share/tuack-ng`；有效判据只有 `langs.json`。
- * 另外验证 `XDG_DATA_HOME` 注入（唯一不污染 HOME 的注入点）。
+ * assets 探测测试：顺序同上游 init.rs::assets_dirs()（工作区 assets、data_local_dir/tuack-ng、
+ * /usr/share/tuack-ng），有效判据只有 langs.json；另测 XDG_DATA_HOME 注入。
+ * 工作区 assets 分支与真二进制实测不符，见 .cache/research/rpc-smoke-report.md 的 D8。
  */
 
 import * as fs from "node:fs";
@@ -53,7 +51,7 @@ describe("dataLocalRoot（dirs::data_local_dir 等价实现）", () => {
 });
 
 describe("assetsSearchOrder（纯函数，Doctor 直接展示）", () => {
-	it("Linux：override → 工作区 assets → XDG/tuack-ng → /usr/share/tuack-ng", () => {
+	it("Linux：override、工作区 assets、XDG/tuack-ng、/usr/share/tuack-ng 的顺序", () => {
 		const order = assetsSearchOrder({
 			overridePath: "/opt/my-assets",
 			workspaceRoot: "/ws",

@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Tuack Jinja (fenced code 注入)",
   "scopeName": "tuack.jinja.fenced",
-  "comment": "为 ```jinja / ```jinja2 围栏代码块提供高亮。VS Code 内置 markdown 没有 jinja grammar，因此这里自带一份精简规则。",
+  "comment": "给 ```jinja 围栏代码块高亮；内置 markdown 没有 jinja grammar，所以自带一份。",
   "injectionSelector": "L:markup.fenced_code.block.markdown",
   "patterns": [
     {
