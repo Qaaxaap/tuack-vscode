@@ -1,21 +1,7 @@
 /**
- * NDJSON 分帧（tuack-ng-rpc 的传输层）。
+ * NDJSON 传输层。在字节层扫换行再解码，避免 chunk 边界切断多字节字符。
  *
- * 关键事实：**一个 `data` 事件不等于一行**。
- * - stdout 的一行可能被拆成任意多个 chunk（管道缓冲、大 JSON 参数）；
- * - 一个 chunk 里可能有多行；
- * - 多字节 UTF-8 字符可能被切成两半。
- *
- * 做法：只在**字节层**扫描 `\n`（0x0A），把「含换行符的完整行」的字节切片单独
- * `toString("utf8")`。这天然不会切开多字节字符——UTF-8 的续字节都 >= 0x80，
- * 不可能等于 0x0A，所以「完整行」必定是完整字符序列。
- *
- * 刻意**不用** `setEncoding("utf8")` + `readline`：那样会把分帧交给 Node 的
- * StringDecoder/readline，出问题时看不到原始字节，也无法对超长行设上限
- * （对端一旦发出没有换行的垃圾数据，内存会无界增长）。
- *
- * 恢复策略：解析失败（非法 JSON、非对象信封）只回调 `onParseError` 并继续处理下一行，
- * 绝不打断流；超长行则丢弃到下一个换行符为止再重新同步。
+ * 非法 JSON 报给 onParseError 后继续读；超长行丢弃到下一个换行再同步。
  */
 
 import { LocalErrorCode, TuackRpcError } from "./errors";
@@ -27,7 +13,7 @@ export const DEFAULT_MAX_LINE_BYTES = 8 * 1024 * 1024;
 export interface SplitLinesResult {
 	/** 完整行（已去掉 `\n`，并去掉行尾 `\r` 与行首 BOM）。空行会是 `""`。 */
 	lines: string[];
-	/** 尚未遇到换行的剩余字节（下一次 `push` 要带上）。 */
+	/** 尚未遇到换行的剩余字节。 */
 	rest: Buffer;
 }
 
@@ -68,7 +54,7 @@ function decodeLine(buffer: Buffer, start: number, end: number): string {
 
 export type NdjsonParseErrorKind = "json" | "shape" | "overflow";
 
-/** 分帧层面的解析错误（不是 RPC 错误；只用于日志与诊断）。 */
+/** 分帧层面的解析错误，不是 RPC 错误。 */
 export class NdjsonParseError extends Error {
 	readonly kind: NdjsonParseErrorKind;
 	/** 出错的那一行（超长行时为空字符串，避免把 8 MiB 垃圾塞进日志）。 */
@@ -103,9 +89,8 @@ export interface NdjsonTransportOptions {
 }
 
 /**
- * NDJSON 传输：`writeValue()` 发一条消息，`onMessage()` 收一条消息。
- *
- * 本类不做请求关联、不解析语义——那是 `RpcClient` 的事。
+ * NDJSON 传输：`writeValue()` 发一条消息，`onMessage()` 收一条。
+ * 不做请求关联与语义解析，那是 `RpcClient` 的事。
  */
 export class NdjsonTransport {
 	readonly input: NodeJS.ReadableStream;
@@ -120,7 +105,7 @@ export class NdjsonTransport {
 	private dropping = false;
 	private closed = false;
 
-	/** 从 stdout 收到的原始字节数——秒退识别要用（`stdout 零字节`）。 */
+	/** 从 stdout 收到的原始字节数，秒退识别要看它是否为零。 */
 	private bytesIn = 0;
 	/** 成功解析出的消息条数。 */
 	private messageCount = 0;
@@ -170,7 +155,7 @@ export class NdjsonTransport {
 		if (this.closed) {
 			return;
 		}
-		// 收尾：最后一行如果没有换行符也要尝试解析一次（对端正常来说都会带 \n）。
+		// 收尾：最后一行如果没有换行符也要尝试解析一次。
 		if (this.pending.length > 0) {
 			const remainder = decodeLine(this.pending, 0, this.pending.length);
 			this.pending = Buffer.alloc(0);
@@ -243,7 +228,7 @@ export class NdjsonTransport {
 		return this.output.write(`${line}\n`);
 	}
 
-	/** 摘掉监听器并标记关闭。**不**结束 output（stdin 的关闭由进程封装决定）。 */
+	/** 摘掉监听器并标记关闭，不结束 output（stdin 的关闭由进程封装决定）。 */
 	close(): void {
 		if (this.closed) {
 			return;

@@ -1,16 +1,9 @@
 /**
- * `tuack-ng-rpc` 子进程封装。
+ * tuack-ng-rpc 子进程封装。
  *
- * 这里解决四件事：
- * 1. **spawn + stderr 采集**：stderr 是有界的（默认保留尾部 64 KiB），同时可以流式回调给日志。
- * 2. **秒退识别**：`assets/langs.json` 缺失时 tuack-ng-rpc 会在读到 stdin 之前就退出
- *    （stderr 有 `Error: 找不到 langs.json`、退出码 1、stdout 零字节）。若不识别，
- *    UI 会傻等 `initialize` 超时。这里把「秒退 + stderr」直接变成可操作的诊断，
- *    并通过 `client.fail()` **立刻**拒绝在等的请求。
- * 3. **进程树 kill**：POSIX 用 `detached` + 负 pid 杀整个进程组；Windows 用 `taskkill /T /F`。
- * 4. **遗留临时目录清理**：tuack-ng 的 `tempfile::TempDir::with_prefix("tuack-ng-*")`
- *    在崩溃/被杀时会留在系统 temp 里（`tuack-ng-runner-*`、`tuack-ng-checker-*`、
- *    `tuack-ng-ren-*` 等），启动时清理掉本扩展自己留下的那批。
+ * 四件事：spawn 与有界 stderr（默认留尾 64 KiB）、秒退识别、进程树 kill、遗留临时目录清理。
+ * 缺 assets/langs.json 时 tuack-ng-rpc 会在读 stdin 之前就退出（stderr 有提示、退出码非 0、
+ * stdout 零字节），不识别的话 UI 会干等 initialize 超时；这里把它变成可操作诊断，并让 client.fail() 立刻拒掉在等的请求。
  */
 
 import { spawn, spawnSync, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -61,23 +54,13 @@ export interface SpawnRpcProcessOptions {
 	fastExitWindowMs?: number;
 	/** stdout 已结束但子进程还活着的兜底等待（毫秒）。 */
 	closeGraceMs?: number;
-	/** 诊断用：已探测过的 assets 目录（会写进 advice）。 */
+	/** 已探测过的 assets 目录，会写进诊断 advice。 */
 	probedAssetsDirs?: readonly string[];
 	onStderr?: (text: string) => void;
 	onExit?: (info: RpcExitInfo) => void;
 }
 
-/**
- * spawn 一个 `tuack-ng-rpc` 进程（**不**自动 initialize）。
- *
- * 典型用法：
- * ```ts
- * const proc = spawnRpcProcess({ command: rpcPath });
- * await proc.client.initialize();       // 秒退时这里会立刻抛出带诊断的错误
- * ...
- * await proc.dispose();                 // shutdown → exit → 等待 → 必要时杀进程树
- * ```
- */
+/** spawn 一个 tuack-ng-rpc 进程，不自动 initialize。用完调 dispose()（shutdown、exit，必要时杀进程树）。 */
 export function spawnRpcProcess(options: SpawnRpcProcessOptions): RpcProcess {
 	return new RpcProcess(options);
 }
@@ -122,7 +105,7 @@ export class RpcProcess {
 				windowsHide: true,
 			});
 		} catch (error) {
-			// spawn 同步失败（参数非法等）——仍然返回一个「已死」的包装，避免调用方拿到 undefined。
+			// spawn 同步失败（参数非法等）直接抛 SpawnFailed，不让调用方拿到半成品。
 			throw TuackRpcError.fromUnknown(LocalErrorCode.SpawnFailed, `无法启动 ${options.command}`, error);
 		}
 		this.child = child;
@@ -152,8 +135,8 @@ export class RpcProcess {
 		child.on("error", (error: Error) => {
 			this.spawnError = error;
 			logger.error(`[rpc] 子进程错误（${options.command}）：${error.message}`);
-			// pid 缺失说明是 **spawn 失败**（ENOENT/EACCES），此时不会再有真实退出码；
-			// 立刻 finalize，让等待 initialize 的调用方马上拿到可操作诊断。
+			// pid 缺失说明是 spawn 失败（ENOENT/EACCES），此时不会再有真实退出码；
+			// 立刻 finalize，让等 initialize 的调用方马上拿到诊断。
 			if (this.child.pid === undefined) {
 				this.finalize(null, null);
 			}
@@ -175,7 +158,7 @@ export class RpcProcess {
 		return this.exitInfoValue;
 	}
 
-	/** stderr 的**尾部**（有界）。 */
+	/** stderr 的尾部（有界）。 */
 	get stderrText(): string {
 		return this.stderrBuffer;
 	}
@@ -195,8 +178,7 @@ export class RpcProcess {
 	}
 
 	/**
-	 * 优雅回收：`shutdown` → `exit` → 关 stdin → 等进程退出；超时则杀**进程树**。
-	 * 幂等；已经退出时直接返回临终信息。
+	 * 优雅回收：shutdown、exit、关 stdin，等不到退出就杀进程树。幂等，已退出时直接返回临终信息。
 	 */
 	async dispose(options?: { graceful?: boolean; timeoutMs?: number }): Promise<RpcExitInfo> {
 		const graceful = options?.graceful ?? true;
@@ -260,7 +242,7 @@ export class RpcProcess {
 
 	private onStreamEnd(): void {
 		// stdout 结束通常意味着进程即将 close。若 close 迟迟不来（半死进程），
-		// 不能让待决请求一直挂着——用兜底定时器把它们拒掉。
+		// 不能让待决请求一直挂着，用兜底定时器拒掉。
 		if (this.finalized || this.endFallbackTimer) {
 			return;
 		}
@@ -388,8 +370,8 @@ const LANGS_JSON_RE = /langs\.json/i;
 const NOT_FOUND_RE = /(enoent|no such file or directory|command not found|not recognized as an internal|无法找到|找不到)/i;
 
 /**
- * 秒退诊断：**这是唯一能让用户在 10 秒内明白「为什么 tuack-ng-rpc 一启动就死」的地方**，
- * 所以文案必须是可操作的（指到确切设置项与已探测目录），而不是「进程退出了」。
+ * 秒退诊断。这里是用户唯一能搞明白 tuack-ng-rpc 为什么一启动就死的地方，
+ * 文案必须可操作（指到确切设置项与已探测目录），不能只说「进程退出了」。
  */
 export function diagnoseQuickExit(info: RpcExitInfo, probedAssetsDirs?: readonly string[]): QuickExitDiagnosis {
 	const stderr = info.stderr;
@@ -460,7 +442,7 @@ export function diagnoseQuickExit(info: RpcExitInfo, probedAssetsDirs?: readonly
 	};
 }
 
-/** 诊断渲染成多行文本（Doctor / 错误提示用）。 */
+/** 诊断渲染成多行文本。 */
 export function renderQuickExitDiagnosis(info: RpcExitInfo): string {
 	const diagnosis = info.diagnosis ?? diagnoseQuickExit(info);
 	const lines = [`${diagnosis.summary}`, `命令行退出：code=${info.code ?? "null"} signal=${info.signal ?? "null"} stdout=${info.stdoutBytes}B`];
@@ -498,11 +480,8 @@ export interface KillTreeOptions {
 }
 
 /**
- * 杀**进程树**。
- *
- * - Windows：`taskkill /pid <pid> /T /F`（`/T` 才带子进程）。
- * - POSIX：`detached` 启动的子进程自成进程组，用 `kill(-pid)` 一次带走整组；
- *   先 SIGTERM，等不到再 SIGKILL。
+ * 杀进程树。Windows 用 `taskkill /T /F`（带 /T 才会连子进程）；
+ * POSIX 下 detached 启动的子进程自成进程组，用 kill(-pid) 一次带走整组，先 SIGTERM 再 SIGKILL。
  */
 export async function killProcessTree(pid: number, options: KillTreeOptions = {}): Promise<void> {
 	const platform = options.platform ?? process.platform;
@@ -603,7 +582,7 @@ export interface CleanupStaleTempOptions {
 	minAgeMs?: number;
 	/** 只报告不删除。 */
 	dryRun?: boolean;
-	/** 注入时钟（测试用）。 */
+	/** 注入时钟。 */
 	now?: number;
 	/** 判定 pid 是否存活（默认 POSIX 看 /proc）。 */
 	isPidAlive?: (pid: number) => boolean;
@@ -618,10 +597,8 @@ export interface CleanupStaleTempResult {
 /**
  * 启动时清理本扩展（或崩溃的 tuack-ng 进程）遗留在 temp 里的 `tuack-ng-*` 目录。
  *
- * 保守策略，宁可漏删也不误删：
- * - 只处理目录（跳过文件/符号链接）；
- * - 目录名尾部是数字时视为 pid，pid 还活着就跳过；
- * - 其余目录要求 mtime 早于 `minAgeMs`（默认 6 小时）才删。
+ * 宁可漏删也不误删：只处理目录（跳过文件与符号链接）；名字尾部是数字就当 pid，活着就跳过；
+ * 其余要求 mtime 早于 `minAgeMs`（默认 6 小时）。
  */
 export async function cleanupStaleTempDirs(options: CleanupStaleTempOptions = {}): Promise<CleanupStaleTempResult> {
 	const tmpDir = options.tmpDir ?? os.tmpdir();

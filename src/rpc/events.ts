@@ -1,13 +1,8 @@
 /**
- * 事件路由：把 `run/*`、`ren/*` 通知送到正确的地方。
+ * 事件路由：把 `run/*`、`ren/*` 通知送到正确的地方。不碰进程与网络，纯逻辑，便于单测。
  *
- * 两个必须处理的协议事实：
- * 1. **事件可能早于响应**：`run/create` 会先发出 `run/started`，之后才回 `runId` 响应。
- *    因此收到「认不出来的 id」的事件时要先缓冲，等 id 被登记（响应到达 / 池层 recognize）
- *    后按到达顺序回放。
- * 2. **`seq` 是进程级单调递增**：缺口说明丢了事件（或跨进程混流），必须能被检测到。
- *
- * 本模块不碰进程与网络，纯逻辑，便于单测。
+ * 事件可能早于响应：`run/create` 会先发 `run/started` 再回 `runId`，所以认不出的 id 要先缓冲，
+ * 等 id 被登记（响应到达或池层 recognize）后按到达顺序回放。`seq` 是进程级单调递增，缺口说明丢了事件。
  */
 
 import {
@@ -78,10 +73,8 @@ export function streamIdFromResult(method: string, result: unknown): { kind: Str
 }
 
 /**
- * `seq` 缺口检测（每个进程一个实例）。
- *
- * `seq` 从 1 开始；`observe` 返回是否出现缺口以及跳过了多少。缺口只记日志——事件缺失
- * 不能用 RPC 错误表达，而且最终结论来自 `run/judge` 的响应，不依赖事件完整性。
+ * `seq` 缺口检测（每个进程一个实例）。`seq` 从 1 开始，`observe` 返回是否缺口以及跳过了多少；
+ * 缺口只记日志：事件缺失没法用 RPC 错误表达，最终结论来自 `run/judge` 的响应，不依赖事件完整性。
  */
 export class SeqTracker {
 	private last = 0;
@@ -117,8 +110,7 @@ export class SeqTracker {
 }
 
 /**
- * 事件订阅总线：同一批事件可以既有「全部事件」订阅者，也有「按方法」订阅者。
- * 单个订阅者抛错不影响其它订阅者。
+ * 事件订阅总线：同一批事件可以既有全部事件的订阅者，也有按方法的订阅者。单个订阅者抛错不影响其它订阅者。
  */
 export class RpcEventBus {
 	private readonly all = new Set<(event: RpcEvent) => void>();
@@ -182,7 +174,7 @@ function safeInvoke(handler: (event: RpcEvent) => void, event: RpcEvent): void {
 export interface EventCorrelatorOptions {
 	/** 未登记 id 的事件最多缓冲多少条（超出丢最旧的）。 */
 	maxBufferedEvents?: number;
-	/** 缓冲溢出时回调（用于日志/诊断）。 */
+	/** 缓冲溢出时回调。 */
 	onDrop?: (event: RpcEvent, reason: "overflow" | "discard" | "flush") => void;
 }
 
@@ -190,12 +182,8 @@ export interface EventCorrelatorOptions {
 export const DEFAULT_MAX_BUFFERED_EVENTS = 4096;
 
 /**
- * 未登记 id 的事件缓冲器。
- *
- * 用法：
- * - 收到事件 → `route(event)`；返回 `true` 表示 id 已登记、可以直接投递；`false` 表示已缓冲。
- * - 新 id 被创建（`run/create` / `ren/run` 的响应，或池层显式登记）→
- *   `recognize(kind, id)` 返回需要回放的事件（按到达顺序）。
+ * 未登记 id 的事件缓冲器。`route(event)` 返回 `true` 表示 id 已登记可直接投递，`false` 表示已缓冲；
+ * 新 id 被创建时（`run/create` / `ren/run` 的响应，或池层显式登记）调 `recognize(kind, id)` 取回要回放的事件。
  */
 export class EventCorrelator {
 	private readonly known = new Set<string>();
@@ -261,7 +249,7 @@ export class EventCorrelator {
 		return false;
 	}
 
-	/** 取走剩余缓冲（进程回收 / 池关闭时用），不清空 known。 */
+	/** 取走剩余缓冲，不清空 known。 */
 	flush(): RpcEvent[] {
 		const all = this.buffered.splice(0, this.buffered.length);
 		for (const event of all) {
@@ -270,7 +258,7 @@ export class EventCorrelator {
 		return all;
 	}
 
-	/** 丢弃满足条件的事件（例如某个 P2 进程被回收后，它的早到事件不再有意义）。 */
+	/** 丢弃满足条件的事件。 */
 	discardWhere(predicate: (event: RpcEvent) => boolean): number {
 		let removed = 0;
 		for (let i = this.buffered.length - 1; i >= 0; i -= 1) {
@@ -284,7 +272,7 @@ export class EventCorrelator {
 		return removed;
 	}
 
-	/** 遗忘一个 id（终态后调用，避免 known 集合无界增长）。 */
+	/** 遗忘一个 id，避免 known 集合无界增长。 */
 	forget(kind: StreamKind, id: string): void {
 		this.known.delete(EventCorrelator.key(kind, id));
 	}
@@ -317,18 +305,12 @@ export class EventCorrelator {
 }
 
 /**
- * 已知事件方法名集合的再导出（`KNOW_EVENT_METHODS` 在 protocol.ts 里）。
- * 收到未知事件方法时**只记日志、不报错**是硬要求：tuack-ng 新增事件不应让客户端崩。
+ * 已知事件方法名集合的再导出（定义在 `protocol.ts`）。收到未知事件方法只记日志、不报错。
  */
 
 /**
- * JSON-RPC 通知 → 逻辑事件。
- *
- * 线上形态是标准 JSON-RPC 通知：
- * `{"jsonrpc":"2.0","method":"run/started","params":{seq,sessionId,runId,…}}`，
- * 而 `RpcEvent`（protocol.ts）描述的是**扁平**的逻辑事件（`method` 与事件字段同一层）。
- * 这里做那次映射。为兼容上游可能的扁平化写法，`params` 缺失或不是对象时退化为
- * 「整条信封即事件负载」。
+ * 把 JSON-RPC 通知映射成逻辑事件。线上是标准通知（`method` + `params`），
+ * 而 `RpcEvent` 是扁平形态（`method` 与事件字段同一层）；`params` 缺失或不是对象时退化成整条信封即负载。
  */
 export function toRpcEvent(notification: RpcNotification): RpcEvent {
 	const params = notification.params;
@@ -346,12 +328,11 @@ export function classifyNotification(message: RpcNotification): { kind: "event";
 	return { kind: "unknown", method: message.method };
 }
 
-/** 已知事件方法名（供 Doctor / 测试断言）。 */
+/** 已知事件方法名。 */
 export const KNOWN_EVENT_METHOD_NAMES: readonly RpcEventMethod[] = KNOWN_EVENT_METHODS;
 
 /**
- * 方法 → 所需 capability。`initialize` / `shutdown` 不需要能力。
- * `capabilities` 存下来后，调用未声明的方法前先用这个表校验。
+ * 方法所需的 capability（`initialize` / `shutdown` / `exit` 不需要）。调用未声明的方法前先用这张表校验。
  */
 export function capabilityForMethod(method: string): Capability | undefined {
 	if (method === "initialize" || method === "shutdown" || method === "exit") {

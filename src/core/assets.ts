@@ -1,20 +1,9 @@
 /**
- * assets 目录探测（复刻 tuack-ng 自己的查找顺序）。
+ * assets 目录探测，复刻 tuack-ng 自己的查找顺序（上游 crates/tuack-ng/src/init.rs::assets_dirs()）。
+ * 有效判据只有一个：目录里有 langs.json；缺了就是硬阻塞，连 ren/preview 都不可用，不能假装降级。
  *
- * 上游 `crates/tuack-ng/src/init.rs::assets_dirs()` 的顺序：
- * 1. `<CARGO_MANIFEST_DIR>/../../assets`（**仅 debug 构建**，即源码树根的 `assets/`）→ 对应本扩展的 `<工作区>/assets`；
- * 2. `dirs::data_local_dir()/tuack-ng`（Linux 为 `$XDG_DATA_HOME|~/.local/share`；Windows 为 `%LOCALAPPDATA%`）；
- * 3. 系统目录 `/usr/share/tuack-ng`（nix 构建下是 `<exe>/../../share/tuack-ng`）。
- *
- * 判定「有效」的唯一标准是目录里有 `langs.json`——上游是
- * `assets_dirs.iter().find_map(|d| d.join("langs.json").exists())`，然后
- * `fs::read_to_string(...).unwrap()`。**没有 langs.json = 硬阻塞**（连 `ren/preview` 都不可用），
- * 不能假装降级。
- *
- * 注入点：因为上游只认 `data_local_dir()/tuack-ng`，唯一的注入方式是把子进程的
- * `XDG_DATA_HOME`（Linux）/ `LOCALAPPDATA`（Windows）指到一个**含 `tuack-ng` 子目录**的根。
- * 若探测到的目录名不是 `tuack-ng`，用 `ensureAssetsShim()` 在外加目录里建一个
- * `tuack-ng` 符号链接，再注入那个外加目录。
+ * 注入点只有 XDG_DATA_HOME（Windows 为 LOCALAPPDATA），且指到的根下必须有 tuack-ng 子目录；
+ * 目录名不是 tuack-ng 时先用 ensureAssetsShim() 建符号链接。
  */
 
 import * as fs from "node:fs";
@@ -53,9 +42,9 @@ export interface AssetsProbeOptions {
 	/** 是否加入 `<exe>/../../share/tuack-ng`（默认 false，只在 nix 构建下有意义）。 */
 	includeNixExeRelative?: boolean;
 	extraDirs?: readonly string[];
-	/** 注入「是否存在目录」判定（测试用）。 */
+	/** 注入「是否存在目录」判定。 */
 	statDirectory?: (dirPath: string) => Promise<boolean>;
-	/** 注入「是否存在普通文件」判定（测试用）。判定 langs.json 用。 */
+	/** 注入「是否存在普通文件」判定，用于判定 langs.json。 */
 	statFile?: (filePath: string) => Promise<boolean>;
 	/** 覆盖路径相对谁解析，默认 `process.cwd()`。 */
 	cwd?: string;
@@ -65,7 +54,7 @@ export interface AssetsResolution {
 	/** 第一个含 `langs.json` 的目录；`null` 表示硬阻塞。 */
 	dir: string | null;
 	source: AssetsSource | null;
-	/** 按查找顺序排列的全部候选（Doctor 要逐条标注命中/未命中）。 */
+	/** 按查找顺序排列的全部候选。 */
 	candidates: AssetsCandidate[];
 	/** 设置了 `tuack.assetsPath` 但它无效时的说明。 */
 	overrideProblem?: string;
@@ -99,7 +88,7 @@ export function dataLocalRoot(env: NodeJS.ProcessEnv = process.env, platform: No
 }
 
 /**
- * 纯函数：按 tuack-ng 的顺序算出候选目录（不碰文件系统，便于单测与 Doctor 展示）。
+ * 纯函数：按 tuack-ng 的顺序算出候选目录，不碰文件系统。
  */
 export function assetsSearchOrder(options: AssetsProbeOptions = {}): { path: string; source: AssetsSource; note?: string }[] {
 	const platform = options.platform ?? process.platform;
@@ -210,7 +199,7 @@ export async function resolveAssetsDir(options: AssetsProbeOptions = {}): Promis
 	return (await inspectAssets(options)).dir;
 }
 
-/** 探测到的候选目录列表（喂给 `process.ts` 的秒退诊断 / Doctor）。 */
+/** 探测到的候选目录列表。 */
 export function probedAssetsPaths(resolution: AssetsResolution): string[] {
 	return resolution.candidates.map((candidate) => candidate.path);
 }
@@ -225,10 +214,8 @@ export interface AssetsEnvResult {
 }
 
 /**
- * 把子进程的环境指向指定 assets 目录。
- *
- * 前提：目录的 **basename 必须是 `tuack-ng`**（上游查的是 `data_local_dir()/tuack-ng`）。
- * 否则用 `assetsEnvForDir()`（会先建符号链接 shim）。
+ * 把子进程的环境指向指定 assets 目录。目录 basename 必须是 tuack-ng（上游查的就是
+ * data_local_dir()/tuack-ng）；否则先用 assetsEnvForDir() 建符号链接 shim。
  */
 export function buildAssetsEnv(
 	dir: string,

@@ -1,16 +1,9 @@
 /**
- * RPC 错误类型。
+ * RPC 错误类型。两类错误码：服务端码来自 protocol.ts 的 ErrorCode，原样放在 TuackRpcError.code 上；
+ * 本地码（LocalErrorCode）是客户端自己产生的失败，放在服务端不用的 -32090 段，避免撞号，isLocal 可区分。
  *
- * 两类错误码：
- * - **服务端错误码**：来自 `protocol.ts` 的 `ErrorCode`（JSON-RPC 标准段 + 协议 §5 的 -3200x 段），
- *   原样保留在 `TuackRpcError.code` 上，UI 可以据此给出精确提示。
- * - **本地错误码**（`LocalErrorCode`）：客户端自己产生的失败（超时、传输关闭、进程秒退、
- *   能力缺失、生命周期违规…）。刻意放在服务端**不会使用**的 -32090 段落里，
- *   避免与未来协议扩展撞号。`TuackRpcError.isLocal` 可区分两类。
- *
- * 注意 `-32000`（InternalError）是服务端的通用失败码，`-32003`（CompileFailed）与
- * `-32004`（RunFailed）才是评测相关的语义错误；`run/judge` 单点失败**不是** RPC 错误——
- * 它是 `JudgeResult.status`，不要混。
+ * -32000 InternalError 只是服务端的通用失败码，-32003 CompileFailed 与 -32004 RunFailed 才是评测语义错误。
+ * run/judge 的单点失败不是 RPC 错误，它是 JudgeResult.status。
  */
 
 import { ErrorCode, type RpcFailure } from "./protocol";
@@ -45,7 +38,7 @@ export const LocalErrorCode = {
 
 export type LocalErrorCodeValue = (typeof LocalErrorCode)[keyof typeof LocalErrorCode];
 
-/** 错误码 → 短名（日志与 Doctor 展示用）。 */
+/** 错误码对应的短名。 */
 export const ERROR_CODE_NAMES: Readonly<Record<number, string>> = {
 	[ErrorCode.ParseError]: "ParseError",
 	[ErrorCode.InvalidRequest]: "InvalidRequest",
@@ -70,7 +63,7 @@ export const ERROR_CODE_NAMES: Readonly<Record<number, string>> = {
 	[LocalErrorCode.Aborted]: "LocalAborted",
 };
 
-/** 错误码 → 面向用户的中文说明（不含具体上下文）。 */
+/** 错误码对应的面向用户的中文说明（不含具体上下文）。 */
 const ERROR_CODE_HINTS: Readonly<Record<number, string>> = {
 	[ErrorCode.ParseError]: "服务端无法解析请求（客户端 bug 或协议版本不匹配）。",
 	[ErrorCode.InvalidRequest]: "请求信封不合法。",
@@ -123,7 +116,7 @@ export interface ProcessExitErrorData {
 	diagnosis?: QuickExitDiagnosis;
 }
 
-/** 秒退诊断（由 `core/process.ts` 产出，这里只声明形状，避免循环依赖）。 */
+/** 秒退诊断，由 `core/process.ts` 产出。 */
 export interface QuickExitDiagnosis {
 	kind: "assets-missing" | "binary-missing" | "spawn-failed" | "signaled" | "unknown";
 	summary: string;
@@ -131,10 +124,7 @@ export interface QuickExitDiagnosis {
 }
 
 /**
- * 所有 RPC 失败的统一异常类型。
- *
- * - `code` 保留服务端/本地的数字错误码（**不要**丢，UI 要按码分支）；
- * - `data` 保留 JSON-RPC `error.data`（服务端给的结构化细节）。
+ * 所有 RPC 失败的统一异常类型。code 保留服务端或本地的数字错误码，data 保留 JSON-RPC error.data。
  */
 export class TuackRpcError extends Error {
 	readonly code: number;
@@ -187,7 +177,7 @@ export class TuackRpcError extends Error {
 		return this.code === LocalErrorCode.ProcessExited || this.code === LocalErrorCode.TransportClosed;
 	}
 
-	/** 面向用户的可读说明（码的通用解释 + 原始 message）。 */
+/** 面向用户的可读说明（错误码的通用解释）。 */
 	get hint(): string {
 		return describeErrorCode(this.code);
 	}
@@ -198,15 +188,7 @@ export class TuackRpcError extends Error {
 	}
 }
 
-/**
- * 判定任意值是否为 `TuackRpcError`。
- *
- * `code` 可用于精确匹配（数字或数字数组）：
- * ```ts
- * if (isRpcError(e, ErrorCode.RunNotFound)) { ... }
- * if (isRpcError(e, [ErrorCode.SessionNotFound, ErrorCode.RunNotFound])) { ... }
- * ```
- */
+/** 判定任意值是否为 `TuackRpcError`；给 `code` 时按数字或数字数组精确匹配。 */
 export function isRpcError(value: unknown, code?: number | readonly number[]): value is TuackRpcError {
 	if (!(value instanceof TuackRpcError)) {
 		return false;

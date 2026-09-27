@@ -1,13 +1,8 @@
 /**
- * 二进制探测：`resolveBinary()` 四段式。
+ * 二进制探测，四段依次查：设置、工作区 tools/ 与 <contest>/.tuack/bin/、PATH、明确失败。
+ * v1 不做自动下载，最后一段只给可操作指引。
  *
- * 1. 设置（`tuack.rpcPath` / `tuack.typstPath`，`machine-overridable`）；
- * 2. 工作区 `tools/` 与 `<contest>/.tuack/bin/`；
- * 3. `PATH`；
- * 4. 明确失败——**v1 不做自动下载**，只给可操作指引。
- *
- * 本模块刻意**不 import vscode**：设置值由调用方（`extension.ts` / feature 层）读出来传进来，
- * 这样探测逻辑可以在 vitest 里用临时目录直接测。传参形状见 `BinaryLookupOptions`。
+ * 不 import vscode：设置值由调用方读出来传进来，这样探测逻辑能在 vitest 里用临时目录直接测。
  */
 
 import * as fs from "node:fs";
@@ -37,7 +32,7 @@ export interface BinaryLookupOptions {
 	cwd?: string;
 	/** 追加查找目录（v1 未用，留给将来的 `globalStorageUri`）。 */
 	extraDirs?: readonly string[];
-	/** 注入可执行判定（测试用）。 */
+	/** 注入可执行判定。 */
 	isExecutable?: (filePath: string) => boolean | Promise<boolean>;
 }
 
@@ -46,13 +41,13 @@ export interface ResolvedBinary {
 	/** 绝对路径。 */
 	path: string;
 	source: BinarySource;
-	/** 探测过的全部候选路径（Doctor 与错误提示用）。 */
+	/** 探测过的全部候选路径。 */
 	probed: string[];
 	/** 设置里给了路径但不可用时，这里说明原因（此时已回退到后续阶段）。 */
 	settingProblem?: string;
 }
 
-/** 探测失败：**所有**候选都不存在/不可执行。 */
+/** 探测失败：所有候选都不存在或不可执行。 */
 export class BinaryNotFoundError extends Error {
 	readonly binaryName: string;
 	readonly probed: string[];
@@ -69,10 +64,7 @@ export class BinaryNotFoundError extends Error {
 	}
 }
 
-/**
- * 一个二进制名在指定平台上的候选文件名（Windows 需要补扩展名）。
- * 顺序即优先级：裸名 → `.exe` → `.cmd` → `.bat`。
- */
+/** 一个二进制名在指定平台上的候选文件名，顺序即优先级（Windows 补 .exe/.cmd/.bat）。 */
 export function binaryFileNames(name: string, platform: NodeJS.Platform = process.platform): string[] {
 	if (platform !== "win32") {
 		return [name];
@@ -114,10 +106,7 @@ function pathDirs(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string[] {
 }
 
 /**
- * 平台感知的绝对路径判定。
- *
- * 不能直接用 `path.isAbsolute`：它按**宿主平台**的规则判断，而本模块的 `platform` 参数是
- * 可注入的（测试要在 Linux 上验证 Windows 行为）。
+ * 平台感知的绝对路径判定。`platform` 可注入，不能直接用按宿主平台判断的 `path.isAbsolute`。
  */
 export function isAbsoluteFor(platform: NodeJS.Platform, target: string): boolean {
 	if (platform === "win32") {
@@ -130,9 +119,7 @@ function resolveFor(platform: NodeJS.Platform, cwd: string, target: string): str
 	return platform === "win32" ? path.win32.resolve(cwd, target) : path.resolve(cwd, target);
 }
 
-/**
- * 四段式探测。失败时抛 `BinaryNotFoundError`（把「明确失败 + 可操作指引」交给调用方）。
- */
+/** 四段式探测。失败时抛 `BinaryNotFoundError`，把明确失败与可操作指引交给调用方。 */
 export async function resolveBinary(options: BinaryLookupOptions): Promise<ResolvedBinary> {
 	const platform = options.platform ?? process.platform;
 	const env = options.env ?? process.env;

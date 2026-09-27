@@ -1,18 +1,11 @@
 /**
- * RPC 进程池：**控制面（P1）常驻 + 评测面（P2）按需 spawn / 空闲回收**。
+ * RPC 进程池：控制面 P1 常驻，评测面 P2 按需 spawn、空闲回收。
  *
- * 为什么必须两个进程（协议硬约束，见 protocol.ts 顶部）：
- * - `run/judge`、`run/score`、`ren/preview`、`config/*` 是**同步 handler**，会阻塞该进程的
- *   读循环——阻塞期间该进程发不出任何请求（连 `run/cancel` 都发不出）。评测会长时间阻塞，
- *   所以配置与预览必须在另一个进程里，否则评测一开始整个前端就僵住。
- * - `revision` 与 id 计数器是**进程级**：跨进程乐观并发不成立（`-32007` 永远不会触发）。
- *   因此 **P2 禁止 `config/set` / `config/migrate`**，配置只由 P1 写。
+ * 必须开两个进程：run/judge、run/score、ren/preview、config/* 是同步 handler，会阻塞该进程的读循环，
+ * 评测一阻塞整个前端就僵住；且 revision 与 id 计数器是进程级的，跨进程乐观并发不成立（-32007 永不触发），
+ * 所以 P2 禁止 config/set 与 config/migrate，配置只由 P1 写。
  *
- * 池层额外负责：
- * - **id 命名空间化**：`p1:r-1`、`p2:3:r-1`。对外只暴露带前缀的 id，回来时按前缀路由。
- * - **早到事件**：`run/started` 会**先于** `runId` 响应发出；未登记的 id 先缓冲，响应到达后回放。
- * - **capabilities 门控**：`initialize` 声明的能力之外的方法不调用。
- * - **未知 method / 未知事件只记日志**。
+ * 池层还负责 id 加进程前缀（`p1:r-1`、`p2:3:r-1`）并按前缀路由、早到事件缓冲回放、capabilities 门控，未知 method 与事件只记日志。
  */
 
 import {
@@ -51,7 +44,7 @@ export interface RpcEndpoint {
 	readonly role: PoolRole;
 	/** 形如 `p1` / `p2:3`，所有对外 id 以此为前缀。 */
 	readonly namespace: string;
-	/** 该进程 `workspace/open` 得到的 session（**每进程一个**）。 */
+	/** 该进程 `workspace/open` 得到的 session（每进程一个）。 */
 	readonly sessionId: SessionId;
 	readonly capabilities: ReadonlySet<Capability> | undefined;
 	readonly alive: boolean;
@@ -60,7 +53,7 @@ export interface RpcEndpoint {
 	readonly stderrTail?: (() => string) | undefined;
 	call<M extends MethodName>(method: M, params: MethodParams<M>, options?: RpcCallOptions): Promise<MethodResult<M>>;
 	onNotification(handler: (message: RpcNotification) => void): Disposable;
-	/** 优雅回收（shutdown → exit → 必要时杀进程树）。 */
+	/** 优雅回收：shutdown、exit，必要时杀进程树。 */
 	shutdown(): Promise<void>;
 	/** 直接杀进程树。 */
 	kill(): Promise<void>;
@@ -90,7 +83,7 @@ export interface RpcPoolOptions {
 	guardEvaluationWrites?: boolean;
 	/** 是否把 params 里的 `sessionId` 改写成目标进程自己的 session（默认 true）。 */
 	rewriteSessionIds?: boolean;
-	/** 端点创建后的回调（Doctor 记录 pid）。 */
+	/** 端点创建后的回调。 */
 	onEndpointReady?: (endpoint: RpcEndpoint) => void;
 }
 
@@ -108,8 +101,8 @@ export function namespacedId(namespace: string, id: string): string {
 }
 
 /**
- * 拆出命名空间前缀：`p1:12` → `{p1, 12}`；`p2:3:12` → `{p2:3, 12}`。
- * 以**最后一个**冒号切分，因此 `p2:<epoch>:<id>` 不会被切错。
+ * 拆出命名空间前缀：`p1:12` 拆成 `{p1, 12}`，`p2:3:12` 拆成 `{p2:3, 12}`。
+ * 按最后一个冒号切分，所以 `p2:<epoch>:<id>` 不会被切错。
  */
 export function splitNamespacedId(id: string): { namespace: string; id: string } | undefined {
 	const index = id.lastIndexOf(":");
@@ -171,7 +164,7 @@ export class PooledEndpoint {
 		return this.endpoint.capabilities;
 	}
 
-	/** 子进程 stderr 尾部（Doctor 用）。 */
+	/** 子进程 stderr 尾部。 */
 	stderrTail(): string {
 		return this.endpoint.stderrTail?.() ?? "";
 	}
@@ -355,14 +348,14 @@ export class RpcPool {
 
 	// ── 调用 ────────────────────────────────────────────────────────────────
 	/**
-	 * 按方法自动选面：`run/*` → P2（必要时 spawn），其余 → P1。
+	 * 按方法自动选面：`run/*` 走 P2（必要时 spawn），其余走 P1。
 	 * 带命名空间前缀的 `runId`/`taskId` 会覆盖自动选择并按前缀路由。
 	 */
 	call<M extends MethodName>(method: M, params: MethodParams<M>, options?: RpcCallOptions): Promise<MethodResult<M>> {
 		return this.callOn(roleForMethod(method), method, params, options);
 	}
 
-	/** 显式指定面（`workspace/close` 之类需要精确控制的场景，以及测试）。 */
+	/** 显式指定面，用于测试与 `workspace/close` 这类需要精确控制的场景。 */
 	async callOn<M extends MethodName>(
 		role: PoolRole,
 		method: M,
@@ -373,7 +366,7 @@ export class RpcPool {
 			throw TuackRpcError.local(LocalErrorCode.TransportClosed, `进程池已释放，无法调用 ${method}。`);
 		}
 
-		// 1. 命名空间化的 id 参数决定路由。
+		// 命名空间化的 id 参数决定路由。
 		let explicit: ActiveEndpoint | undefined;
 		let rewritten: unknown = params;
 		if (params !== null && typeof params === "object") {
@@ -402,7 +395,7 @@ export class RpcPool {
 			rewritten = record;
 		}
 
-		// 2. 取端点。
+		// 取端点。
 		let internal: ActiveEndpoint;
 		if (explicit) {
 			internal = explicit;
@@ -410,7 +403,7 @@ export class RpcPool {
 			internal = this.toActive(await (role === "p2" ? this.evaluation() : this.control()));
 		}
 
-		// 3. 硬纪律：P2 不能写配置。
+		// P2 不能写配置。
 		if ((method === "config/set" || method === "config/migrate") && internal.role === "p2") {
 			const message =
 				`在评测面（${internal.namespace}）上调用 ${method} 被拒绝：` +
@@ -421,7 +414,7 @@ export class RpcPool {
 			logger.warn(`[pool] ${message}（guardEvaluationWrites=false，已放行）`);
 		}
 
-		// 4. capabilities 门控。
+		// capabilities 门控。
 		const required = capabilityForMethod(method);
 		if (required && internal.endpoint.capabilities && !internal.endpoint.capabilities.has(required)) {
 			throw TuackRpcError.local(
@@ -431,7 +424,7 @@ export class RpcPool {
 			);
 		}
 
-		// 5. session 改写：session 是**进程级**的，跨进程传必然 -32001。
+		// session 改写：session 是进程级的，跨进程传必然 -32001。
 		if (this.rewriteSessionIds && rewritten !== null && typeof rewritten === "object" && "sessionId" in (rewritten as object)) {
 			rewritten = { ...(rewritten as Record<string, unknown>), sessionId: internal.sessionId };
 		}
@@ -551,7 +544,7 @@ export class RpcPool {
 
 	private handleNotification(active: ActiveEndpoint, message: RpcNotification): void {
 		if (!isKnownEvent(message.method)) {
-			// 硬要求：未知事件只记日志。tuack-ng 新增事件不应让客户端崩或报错。
+			// 未知事件只记日志。tuack-ng 新增事件不应让客户端崩或报错。
 			logger.debug(`[pool] ${active.namespace} 发来未知事件 ${message.method}，已忽略。`);
 			return;
 		}
@@ -688,14 +681,14 @@ export interface ProcessEndpointFactoryOptions {
 	initializeTimeoutMs?: number;
 	/** 秒退诊断里要列出的 assets 目录（来自 `core/assets.ts`）。 */
 	probedAssetsDirs?: readonly string[];
-	/** P2 启动后显式 `config/reload`（设计 §3.3：消除快照陈旧）。默认 true。 */
+	/** P2 启动后显式 `config/reload`（设计 §3.3）。默认 true。 */
 	reloadConfigOnEvaluation?: boolean;
 	onStderr?: (namespace: string, text: string) => void;
 	onExit?: (namespace: string, info: RpcExitInfo) => void;
 }
 
 /**
- * 用真实子进程创建端点：spawn → `initialize` → `workspace/open`（P2 再 `config/reload`）。
+ * 用真实子进程创建端点：spawn、initialize、workspace/open，P2 再 config/reload。
  * 失败时保证把刚 spawn 的进程杀干净，不留孤儿。
  */
 export function createProcessEndpointFactory(

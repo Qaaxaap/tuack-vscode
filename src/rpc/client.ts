@@ -1,17 +1,8 @@
 /**
- * 单进程 RPC 客户端。
+ * 单进程 RPC 客户端：id 分配、pending 表、超时、通知分发、错误转换。不含 spawn（core/process.ts）与多进程路由（pool.ts）。
  *
- * 职责：请求 id 分配、pending 表、超时、通知分发、JSON-RPC 错误 → `TuackRpcError`。
- * 不负责 spawn（那是 `process.ts`）也不负责多进程路由（那是 `pool.ts`）。
- *
- * 设计要点：
- * - **id 永不复用**：超时/进程死亡后，晚到的同 id 响应一律丢弃并记 warn，
- *   否则「迟到的响应」会被错配给后续请求。id 是进程内单调递增整数。
- * - **不做任何隐式重试**：`run/judge` 这类同步 handler 会阻塞读循环，
- *   盲目重试只会叠加阻塞。重试策略属于上层。
- * - **未知通知只记日志**：tuack-ng 新增事件不能让客户端报错。
- * - 生命周期按协议强制：`initialize` 之前只能 `initialize`；`shutdown` 之后只能 `exit`。
- *   需要绕开时用 `rawCall()`（显式逃生口，用于 `exit`）。
+ * id 永不复用，晚到的同 id 响应一律丢弃，否则会错配给后续请求；不做隐式重试（run/judge 这类同步 handler 会阻塞读循环）。
+ * 未知通知只记日志；生命周期强制 initialize 先行、shutdown 后只能 exit，要绕开用 rawCall()。
  */
 
 import {
@@ -57,10 +48,7 @@ export interface RpcClientOptions {
 	defaultTimeoutMs?: number;
 	initializeTimeoutMs?: number;
 	shutdownTimeoutMs?: number;
-	/**
-	 * 是否用 `initialize` 返回的 capabilities 门控调用（默认 true）。
-	 * 关闭后仅记 warn，不拦。
-	 */
+	/** 是否用 `initialize` 返回的 capabilities 门控调用（默认 true，关闭后只记 warn 不拦）。 */
 	enforceCapabilities?: boolean;
 	/** 是否强制 `initialize` 先行、`shutdown` 后拒发（默认 true）。 */
 	enforceLifecycle?: boolean;
@@ -85,7 +73,7 @@ function idKey(id: RequestId): string {
 	return `${typeof id}:${id}`;
 }
 
-/** 待决请求快照（诊断/Doctor 用）。 */
+/** 待决请求快照。 */
 export interface PendingCallInfo {
 	id: RequestId;
 	method: string;
@@ -135,7 +123,7 @@ export class RpcClient {
 		return this.initializeResult?.protocolVersion;
 	}
 
-	/** 最近一次失败（Doctor 展示最近 RPC 错误码）。 */
+	/** 最近一次失败。 */
 	get recentError(): TuackRpcError | undefined {
 		return this.lastError;
 	}
@@ -163,13 +151,13 @@ export class RpcClient {
 	}
 
 	// ── 订阅 ────────────────────────────────────────────────────────────────
-	/** 订阅**所有**通知（含未知事件方法）。 */
+	/** 订阅所有通知（含未知事件方法）。 */
 	onNotification(handler: (message: RpcNotification) => void): Disposable {
 		this.notificationHandlers.add(handler);
 		return toDisposable(() => this.notificationHandlers.delete(handler));
 	}
 
-	/** 订阅**已知**事件（`run/*`、`ren/*`），已按类型收窄。 */
+	/** 订阅已知事件（`run/*`、`ren/*`），已按类型收窄。 */
 	onEvent(handler: (event: RpcEvent) => void): Disposable {
 		this.eventHandlers.add(handler);
 		return toDisposable(() => this.eventHandlers.delete(handler));
@@ -177,19 +165,15 @@ export class RpcClient {
 
 	// ── 调用 ────────────────────────────────────────────────────────────────
 	/**
-	 * 发一个类型化请求。
-	 *
-	 * 拒绝的情形：生命周期违规、能力缺失、超时、传输关闭、进程退出、服务端错误。
-	 * 全部以 `TuackRpcError` 拒绝（`code` 保留服务端/本地错误码）。
+	 * 发一个类型化请求。失败一律以 `TuackRpcError` 拒绝（生命周期违规、能力缺失、超时、
+	 * 传输关闭、进程退出、服务端错误），`code` 保留服务端或本地错误码。
 	 */
 	call<M extends MethodName>(method: M, params: MethodParams<M>, options?: RpcCallOptions): Promise<MethodResult<M>> {
 		return this.rawCall(method, params, options) as Promise<MethodResult<M>>;
 	}
 
 	/**
-	 * 未类型化的请求（`exit`、未来新方法、诊断用）。
-	 *
-	 * **只做状态检查之外的最低限度校验**：不透传 capabilities 门控，但仍在关闭/死亡时拒绝。
+	 * 未类型化的请求（`exit`、未来新方法）。不做 capabilities 门控，但关闭或死亡时仍拒绝。
 	 */
 	rawCall(method: string, params?: unknown, options?: RpcCallOptions): Promise<unknown> {
 		// 协议：shutdown 之后只能 exit（或关 stdin），所以 exit 是 closed 状态下的唯一例外。
@@ -290,7 +274,7 @@ export class RpcClient {
 		});
 	}
 
-	/** 发通知（无 id，不等响应）。协议目前没有客户端→服务端通知，留给未来扩展/诊断。 */
+	/** 发通知（无 id，不等响应）。协议目前没有客户端到服务端的通知，留给未来扩展/诊断。 */
 	notify(method: string, params?: unknown): void {
 		if (this.stateValue === "closed" || this.stateValue === "dead") {
 			throw this.closedError(method);
@@ -303,8 +287,7 @@ export class RpcClient {
 	}
 
 	/**
-	 * `initialize`：幂等，失败后不重试（同一 Promise）。
-	 * 成功后记录 capabilities / serverInfo 并进入 `ready`。
+	 * `initialize`：幂等，失败后不重试（同一个 Promise）；成功后记下 capabilities / serverInfo 并进入 `ready`。
 	 */
 	initialize(options?: RpcCallOptions): Promise<InitializeResult> {
 		if (this.initializePromise) {
@@ -354,10 +337,8 @@ export class RpcClient {
 	}
 
 	/**
-	 * 传输/进程已死：拒绝所有 pending（幂等）。
-	 *
-	 * `process.ts` 在子进程 close 时调用它，把「秒退 + stderr 诊断」带给等待中的调用方，
-	 * 而不是让 UI 等到 initialize 超时。
+	 * 传输或进程已死：拒绝所有 pending（幂等）。core/process.ts 在子进程 close 时调用，
+	 * 把秒退与 stderr 诊断带给等待中的调用方，而不是让 UI 干等到 initialize 超时。
 	 */
 	fail(error: TuackRpcError): void {
 		if (this.stateValue === "dead" || this.stateValue === "closed") {
@@ -380,7 +361,7 @@ export class RpcClient {
 	}
 
 	// ── 入站消息 ────────────────────────────────────────────────────────────
-	/** 由 `process.ts` 接在 transport 上（也可以直接单测）。 */
+	/** 由 core/process.ts 接在 transport 上。 */
 	readonly handleMessage = (message: unknown): void => {
 		if (isResponse(message)) {
 			this.handleResponse(message);
@@ -440,7 +421,7 @@ export class RpcClient {
 	private handleNotification(message: RpcNotification): void {
 		const classified = classifyNotification(message);
 		if (classified.kind === "unknown") {
-			// 硬要求：未知事件只记日志，不报错、不 reject 任何 pending。
+			// 未知事件只记日志，不报错、不 reject 任何 pending。
 			logger.debug(`[rpc] 未知通知方法 ${classified.method}，已忽略。`);
 		} else {
 			logger.trace(`[rpc] ← 事件 ${classified.event.method} seq=${classified.event.seq}`);

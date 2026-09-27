@@ -1,19 +1,9 @@
 /**
- * tuack-ng-rpc 协议 v0.1 —— 类型契约。
+ * tuack-ng-rpc 协议 v0.1 的类型契约，只描述协议形状，不含任何网络/进程逻辑。
+ * 依据上游 tuack-ng 的 rpc 分支，crates/tuack-ng-rpc/PROTOCOL.md。
  *
- * 依据：上游 `tuack-ng/tuack-ng` 分支 `rpc`，`crates/tuack-ng-rpc/PROTOCOL.md`。
- * 本文件只描述协议形状，不含任何网络/进程逻辑（那属于 `rpc/transport.ts` 与 `rpc/client.ts`）。
- *
- * 设计约束（来自对上游源码的核实，改动前请先核对）：
- * - 传输：NDJSON over stdio，每行一个 JSON 对象，单条消息不得跨行。
- * - 生命周期：必须先 `initialize`；`shutdown` 之后只能 `exit`（或关 stdin）。
- * - `run/create` 与 `ren/run` 是异步（先回 id，后事件）；`run/judge`、`run/score`、
- *   `ren/preview`、`config/*` 是**同步 handler**，会阻塞该进程的读循环。
- * - 事件可能**早于**触发它的响应到达（`run/started` 先于 `runId` 响应），因此消费方
- *   必须按「待决请求」缓冲无法归属的事件。
- * - `run/finished` **只有 `cancelled` / `error` / `closed`**，**没有成功终态**；
- *   权威结果只能来自 `run/judge` 的响应。
- * - `revision` 与 id 计数器都是**进程级**，跨进程乐观并发不成立。
+ * 反直觉的几条写在对应类型旁边：事件可能早于触发它的响应、run/finished 没有成功终态、
+ * revision 与 id 计数器是进程级的。另外 run/judge、run/score、ren/preview、config/* 是同步 handler，会阻塞该进程的读循环。
  */
 
 export const PROTOCOL_VERSION = "0.1";
@@ -38,12 +28,12 @@ export type Scope = string;
 export type JsonPointer = string;
 /** `file://` 形式的绝对资源标识。 */
 export type Uri = string;
-/** 相对**竞赛工程根**的路径，如 `"day1/conf.json"`、`"day1/p1"`。 */
+/** 相对竞赛工程根的路径，如 `"day1/conf.json"`、`"day1/p1"`。 */
 export type ContestRelativePath = string;
 
 export type ProblemType = "program" | "output" | "interactive";
 
-/** 单个数据点的裁决结果。注意 `PC` 携带 `score`。 */
+/** 单个数据点的裁决结果。PC 会携带 score。 */
 export type TestStatus = "AC" | "WA" | "RE" | "TLE" | "MLE" | "UKE" | "FE" | "PC";
 
 /** run 的生命周期状态（不表示当前是否有 RPC 操作在执行）。 */
@@ -85,11 +75,8 @@ export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
 
 /**
- * conf.json 的 FileView 形态。
- *
- * ⚠️ 字段名与文件完全一致，含 kebab-case 与**带空格**的键：
- * `"time limit"`、`"memory limit"`、`"start time"`、`"end time"`、`"short title"`。
- * 这些是 JSON Pointer 的组成段，拼错会得到 `-32005`（路径不存在）。
+ * conf.json 的 FileView 形态。字段名与文件完全一致，含 kebab-case 与带空格的键
+ * （`"time limit"`、`"memory limit"`、`"start time"`、`"end time"`、`"short title"`），拼错会得到 `-32005`。
  */
 export type FileView = { [key: string]: JsonValue };
 
@@ -143,11 +130,8 @@ export interface ProblemDescriptor {
 
 export interface DataPoint {
 	/**
-	 * 展开后的数据点 id（bundle 已展开）。
-	 *
-	 * ⚠️ 线上返回的是 **number**，而 `run/judge` 的 `testId` **只接受 string**——
-	 * 直接传数字会得到 `-32602`。调用点必须显式 `String(point.id)`。
-	 * （真二进制实测，见 `.cache/research/rpc-smoke-report.md` 的 D2。）
+	 * 展开后的数据点 id（bundle 已展开）。服务端返回数字，但 `run/judge` 的 `testId` 只收字符串，
+	 * 调用点要显式 `String(point.id)`，否则得到 `-32602`。见 `.cache/research/rpc-smoke-report.md` 的 D2。
 	 */
 	id: number;
 	score: number;
@@ -191,7 +175,7 @@ export interface RunCreateParams {
 	tester?: string;
 }
 
-/** `run/judge` 的结果。**这是每个数据点的唯一权威结果。** */
+/** `run/judge` 的结果，也是每个数据点唯一的权威结果。 */
 export interface JudgeResult {
 	testId: string;
 	status: TestStatus;
@@ -200,8 +184,7 @@ export interface JudgeResult {
 	memoryBytes: number | null;
 	/**
 	 * checker 报告（如 `"AC"` / `"Wrong answer on test 7"`）或错误诊断。
-	 * ⚠️ 线上在 `RE` / `TLE` 时给的是 **null**（真二进制实测，报告 D3），
-	 * 展示前必须做空值兜底，不要直接当字符串用。
+	 * 线上 RE / TLE 时给的是 null（报告 D3），展示前要做空值兜底。
 	 */
 	message: string | null;
 	/** 归一化得分：`AC` = 1.0，`PC` ∈ (0,1)，其余 0.0。 */
@@ -252,11 +235,9 @@ export interface LineMapEntry {
 }
 
 /**
- * `ren/preview` 的结果：MiniJinja 展开后的 Markdown（未做 AST 解析/渲染）。
- *
- * - `scope` 必须精确到单个题目。
- * - 同一 `source` 渲染多次（`{% for %}` 循环体）时**只记录第一次出现**的 `rendered`，
- *   因此循环体无法双向映射；滚动同步应以渲染侧的 `data-source-line` 为主。
+ * `ren/preview` 的结果：MiniJinja 展开后的 Markdown（未做 AST 解析/渲染），`scope` 必须精确到单个题目。
+ * 同一 `source` 渲染多次（`{% for %}` 循环体）时只记第一次出现的 `rendered`，循环体无法双向映射，
+ * 滚动同步应以渲染侧的 `data-source-line` 为主。
  */
 export interface RenPreviewResult {
 	markdown: string;
@@ -270,9 +251,7 @@ export interface RenFile {
 }
 
 /**
- * `ren/get` 的权威快照。
- *
- * ⚠️ `tmpDir` 由上游 `TempDir::keep()` 创建，**永不自动清理**；客户端负责在使用后删除。
+ * `ren/get` 的权威快照。`tmpDir` 由上游 `TempDir::keep()` 创建，永不自动清理，客户端用完要自己删。
  */
 export interface RenGetResult {
 	state: RenState;
@@ -333,7 +312,7 @@ export function isNotification(msg: unknown): msg is RpcNotification {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 方法映射（请求 → 结果）
+// 方法映射（请求与结果）
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface InitializeResult {
@@ -343,8 +322,7 @@ export interface InitializeResult {
 }
 
 /**
- * 请求方法的 params/result 映射表。`undefined` 表示无 params。
- * 这是 `RpcClient.call()` 的类型来源。
+ * 请求方法的 params/result 映射表，`undefined` 表示无 params。`RpcClient.call()` 的类型来源。
  */
 export interface MethodMap {
 	initialize: { params: { clientInfo: { name: string; version: string } }; result: InitializeResult };
@@ -400,7 +378,7 @@ export type MethodName = keyof MethodMap;
 export type MethodParams<M extends MethodName> = MethodMap[M]["params"];
 export type MethodResult<M extends MethodName> = MethodMap[M]["result"];
 
-/** 客户端要主动发 `shutdown` 的方法集合之外的、全部出现在协议里的方法名。 */
+/** 协议里出现的全部方法名。 */
 export const KNOWN_METHODS: readonly MethodName[] = [
 	"initialize",
 	"shutdown",
@@ -426,7 +404,7 @@ export const KNOWN_METHODS: readonly MethodName[] = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 服务端 → 客户端事件
+// 服务端到客户端的事件
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 所有事件共有的字段。`seq` 为进程级单调递增序号，用于检测事件序列缺口。 */
@@ -457,7 +435,7 @@ export interface RunReadyEvent extends EventBase {
 	runId: RunId;
 }
 
-/** ⚠️ `state` 只会是 `cancelled` / `error` / `closed`——没有成功终态。 */
+/** `state` 只会是 `cancelled` / `error` / `closed`，没有成功终态。 */
 export interface RunFinishedEvent extends EventBase {
 	method: "run/finished";
 	runId: RunId;
@@ -511,8 +489,8 @@ export type RpcEvent =
 export type RpcEventMethod = RpcEvent["method"];
 
 /**
- * 已知事件方法名。**注意**：收到不在该列表里的通知时必须只记日志、不得报错，
- * 这样 tuack-ng 未来新增事件（例如增量预览推送）不需要客户端同步升级。
+ * 已知事件方法名。收到不在列表里的通知只记日志、不报错，
+ * 这样 tuack-ng 新增事件（例如增量预览推送）不需要客户端同步升级。
  */
 export const KNOWN_EVENT_METHODS: readonly RpcEventMethod[] = [
 	"run/started",
@@ -533,12 +511,12 @@ export function isKnownEvent(method: string): method is RpcEventMethod {
 // scope 转义（协议 §4）
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** 转义单个 scope 段：先 `~` → `~0`，再 `/` → `~1`。 */
+/** 转义单个 scope 段：先 `~` 换成 `~0`，再 `/` 换成 `~1`。 */
 export function escapeScopeSegment(segment: string): string {
 	return segment.replace(/~/g, "~0").replace(/\//g, "~1");
 }
 
-/** 还原单个 scope 段：先 `~1` → `/`，再 `~0` → `~`。 */
+/** 还原单个 scope 段：先 `~1` 换成 `/`，再 `~0` 换成 `~`。 */
 export function unescapeScopeSegment(segment: string): string {
 	return segment.replace(/~1/g, "/").replace(/~0/g, "~");
 }
@@ -564,7 +542,7 @@ export function parseScope(scope: Scope): { day?: string; problem?: string } {
 	return { day: parts[0], problem: parts[1] };
 }
 
-/** 拼出 `"<day>/<problem>"` 形式的 problem 标识（`problem/get`、`run/create` 用）。 */
+/** 拼出 `"<day>/<problem>"` 形式的 problem 标识。 */
 export function makeProblemId(day: string, problem: string): string {
 	return `${escapeScopeSegment(day)}/${escapeScopeSegment(problem)}`;
 }
