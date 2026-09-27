@@ -1,0 +1,89 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "watch",
+      "dependsOn": [
+        "watch:esbuild",
+        "watch:tsc"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "watch:esbuild",
+      "type": "shell",
+      "command": "pnpm",
+      "args": [
+        "run",
+        "watch"
+      ],
+      "presentation": {
+        "reveal": "never",
+        "group": "watch"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "esbuild",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^✘ \\[ERROR\\] (.*)$",
+          "message": 1,
+          "file": 2,
+          "line": 3,
+          "column": 4
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\[watch\\] build started$",
+          "endsPattern": "^\\[watch\\] build finished$"
+        }
+      }
+    },
+    {
+      "label": "watch:tsc",
+      "type": "shell",
+      "command": "pnpm",
+      "args": [
+        "run",
+        "check-types",
+        "--watch",
+        "--preserveWatchOutput"
+      ],
+      "presentation": {
+        "reveal": "never",
+        "group": "watch"
+      },
+      "isBackground": true,
+      "problemMatcher": "$tsc-watch"
+    },
+    {
+      "label": "check-types",
+      "type": "shell",
+      "command": "pnpm",
+      "args": [
+        "run",
+        "check-types"
+      ],
+      "group": "test",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "test:unit",
+      "type": "shell",
+      "command": "pnpm",
+      "args": [
+        "run",
+        "test:unit"
+      ],
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}
