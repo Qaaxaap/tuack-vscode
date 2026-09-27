@@ -12,3 +12,6 @@ docs/**
 .gitignore
 eslint.config.js
 esbuild.js
+flake.nix
+flake.lock
+justfile
